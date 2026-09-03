@@ -99,12 +99,12 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 // Health check
-app.get("/api/health", (_req, res) => {
+app.get(["/api/health", "/health"], (_req, res) => {
   res.json({ status: "ok", service: "Krow Kirana Backend", time: new Date().toISOString() });
 });
 
   // Auth: Signup
-  app.post(["/api/auth/signup", "/api/auth/signup/"], (req, res) => {
+  app.post(["/api/auth/signup", "/auth/signup", "/api/auth/signup/", "/auth/signup/"], (req, res) => {
     try {
       const { identifier, password, shopName, shopType, language } = req.body;
       if (!identifier || !password) {
@@ -254,7 +254,7 @@ app.get("/api/health", (_req, res) => {
   });
 
   // Shop Data: Sync/Save
-  app.post(["/api/shop/sync", "/api/shop/sync/"], (req, res) => {
+  app.post(["/api/shop/sync", "/shop/sync", "/api/shop/sync/", "/shop/sync/"], (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       const token = authHeader?.replace("Bearer ", "") || (req.body.token as string);
@@ -306,8 +306,8 @@ app.get("/api/health", (_req, res) => {
     }
   });
 
-  // AI-Powered Bill Scanning with Gemini
-  app.post(["/api/scan-bill", "/api/scan-bill/"], async (req, res) => {
+  // AI-Powered Bill Scanning with Gemini (with multi-model automatic resilience)
+  app.post(["/api/scan-bill", "/scan-bill", "/api/scan-bill/", "/scan-bill/"], async (req, res) => {
     try {
       const { imageBase64, mimeType = "image/jpeg", shopType = "general_store", language = "hi" } = req.body;
 
@@ -318,7 +318,7 @@ app.get("/api/health", (_req, res) => {
       // Check Gemini API key
       if (!process.env.GEMINI_API_KEY) {
         return res.status(500).json({
-          error: "GEMINI_API_KEY is not configured on the server. Please check the Secrets settings.",
+          error: "GEMINI_API_KEY is not configured on the server. Please check your environment variables.",
         });
       }
 
@@ -372,87 +372,106 @@ Extract all inventory items into the structured schema. Skip non-item expenses. 
         },
       };
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: {
-          parts: [imagePart, { text: promptText }],
-        },
-        config: {
-          systemInstruction,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              vendorName: {
-                type: Type.STRING,
-                description: "Name of distributor, agency, or wholesaler if visible on bill header",
-              },
-              invoiceNumber: {
-                type: Type.STRING,
-                description: "Invoice or parchi number if visible",
-              },
-              invoiceDate: {
-                type: Type.STRING,
-                description: "Date of bill if visible (YYYY-MM-DD or readable string)",
-              },
-              totalAmount: {
-                type: Type.NUMBER,
-                description: "Stated grand total on bill",
-              },
-              items: {
-                type: Type.ARRAY,
-                description: "List of valid inventory products purchased",
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: {
-                      type: Type.STRING,
-                      description: "Item name, including package size/weight (e.g. '500g Garam Masala', 'Tata Salt 1kg')",
-                    },
-                    quantity: {
-                      type: Type.NUMBER,
-                      description: "Number of units/packets purchased (not the grams/kg inside the package)",
-                    },
-                    unit: {
-                      type: Type.STRING,
-                      description: "Custom spoken unit (e.g. packet, piece, laddi, kg, box, pouch, bottle, carton)",
-                    },
-                    buyPrice: {
-                      type: Type.NUMBER,
-                      description: "Purchase cost per unit (totalPrice / quantity)",
-                    },
-                    totalPrice: {
-                      type: Type.NUMBER,
-                      description: "Total purchase amount for this line item",
-                    },
-                    suggestedSellPrice: {
-                      type: Type.NUMBER,
-                      description: "Suggested selling retail price (approx 10-20% margin)",
-                    },
-                    suggestedCategory: {
-                      type: Type.STRING,
-                      description: "Category matching shop type",
-                    },
-                    spoilQuickly: {
-                      type: Type.BOOLEAN,
-                      description: "True if perishable like milk/bread/dairy/fresh sweets",
-                    },
-                    exchangeableOnSpoil: {
-                      type: Type.BOOLEAN,
-                      description: "True if distributor usually exchanges spoiled packs (like bread)",
-                    },
-                  },
-                  required: ["name", "quantity", "unit", "buyPrice", "totalPrice"],
+      const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          vendorName: {
+            type: Type.STRING,
+            description: "Name of distributor, agency, or wholesaler if visible on bill header",
+          },
+          invoiceNumber: {
+            type: Type.STRING,
+            description: "Invoice or parchi number if visible",
+          },
+          invoiceDate: {
+            type: Type.STRING,
+            description: "Date of bill if visible (YYYY-MM-DD or readable string)",
+          },
+          totalAmount: {
+            type: Type.NUMBER,
+            description: "Stated grand total on bill",
+          },
+          items: {
+            type: Type.ARRAY,
+            description: "List of valid inventory products purchased",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: {
+                  type: Type.STRING,
+                  description: "Item name, including package size/weight (e.g. '500g Garam Masala', 'Tata Salt 1kg')",
+                },
+                quantity: {
+                  type: Type.NUMBER,
+                  description: "Number of units/packets purchased (not the grams/kg inside the package)",
+                },
+                unit: {
+                  type: Type.STRING,
+                  description: "Custom spoken unit (e.g. packet, piece, laddi, kg, box, pouch, bottle, carton)",
+                },
+                buyPrice: {
+                  type: Type.NUMBER,
+                  description: "Purchase cost per unit (totalPrice / quantity)",
+                },
+                totalPrice: {
+                  type: Type.NUMBER,
+                  description: "Total purchase amount for this line item",
+                },
+                suggestedSellPrice: {
+                  type: Type.NUMBER,
+                  description: "Suggested selling retail price (approx 10-20% margin)",
+                },
+                suggestedCategory: {
+                  type: Type.STRING,
+                  description: "Category matching shop type",
+                },
+                spoilQuickly: {
+                  type: Type.BOOLEAN,
+                  description: "True if perishable like milk/bread/dairy/fresh sweets",
+                },
+                exchangeableOnSpoil: {
+                  type: Type.BOOLEAN,
+                  description: "True if distributor usually exchanges spoiled packs (like bread)",
                 },
               },
+              required: ["name", "quantity", "unit", "buyPrice", "totalPrice"],
             },
-            required: ["items"],
           },
         },
-      });
+        required: ["items"],
+      };
 
-      const responseText = response.text || "{}";
-      const parsedData = JSON.parse(responseText);
+      // Multi-model resilience: Try fast and available models
+      const candidateModels = ["gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-flash-latest"];
+      let lastError: any = null;
+      let parsedData: any = null;
+
+      for (const modelName of candidateModels) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: {
+              parts: [imagePart, { text: promptText }],
+            },
+            config: {
+              systemInstruction,
+              responseMimeType: "application/json",
+              responseSchema,
+            },
+          });
+
+          const responseText = response.text || "{}";
+          parsedData = JSON.parse(responseText);
+          break; // Succeeded!
+        } catch (mErr: any) {
+          console.warn(`Scan model ${modelName} failed, trying fallback:`, mErr?.message || mErr);
+          lastError = mErr;
+        }
+      }
+
+      if (!parsedData) {
+        throw lastError || new Error("Unable to analyze bill with available AI models. Please try again.");
+      }
 
       return res.json({
         success: true,

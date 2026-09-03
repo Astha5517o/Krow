@@ -43,7 +43,53 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
   const [hasScanned, setHasScanned] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  const processFile = (file: File) => {
+  // Client-side image compression: downscales giant phone camera photos to max 1600px
+  // Keeps file size around 200-400KB, preventing network drops and Vercel 4.5MB payload limits
+  const compressImageFile = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const maxDim = 1600;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/jpeg', 0.85);
+        resolve(compressed);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      };
+      img.src = objectUrl;
+    });
+  };
+
+  const processFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       setErrorMessage(
         lang === 'hi'
@@ -53,13 +99,21 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      setImagePreview(base64);
-      processBillImage(base64);
-    };
-    reader.readAsDataURL(file);
+    try {
+      setIsAnalyzing(true);
+      const compressedBase64 = await compressImageFile(file);
+      setImagePreview(compressedBase64);
+      processBillImage(compressedBase64);
+    } catch (e) {
+      console.warn('Canvas compression fallback to direct read:', e);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        setImagePreview(base64);
+        processBillImage(base64);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -208,40 +262,43 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
       });
 
       const isJson = res.headers.get('content-type')?.includes('application/json');
-      if (!isJson) {
+      let data: any = null;
+      if (isJson) {
+        data = await res.json();
+      }
+
+      if (!res.ok || !data) {
         throw new Error(
-          lang === 'hi'
-            ? 'बिल स्कैनर सर्वर से संपर्क नहीं हो पाया। कृपया नमूना पर्ची देखें या फिर से प्रयास करें।'
-            : 'AI bill scanner server is offline. Please try again or load sample bill.'
+          data?.error ||
+          (lang === 'hi'
+            ? 'बिल स्कैनर सर्वर से संपर्क नहीं हो पाया। कृपया दोबारा प्रयास करें या नमूना पर्ची देखें।'
+            : 'AI bill scanner server is busy or unreachable. Please try again or load sample bill.')
         );
       }
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to scan bill');
-      }
+      const billData = data.data || data;
+      setVendorName(billData.vendorName || '');
+      setInvoiceDate(billData.invoiceDate || new Date().toISOString().split('T')[0]);
 
-      setVendorName(data.vendorName || '');
-      setInvoiceDate(data.invoiceDate || '');
-
-      const items: ScannedBillDraftItem[] = (data.items || []).map((it: any, idx: number) => {
+      const rawItems = Array.isArray(billData.items) ? billData.items : Array.isArray(data.items) ? data.items : [];
+      const items: ScannedBillDraftItem[] = rawItems.map((it: any, idx: number) => {
         // Look for match in existing items
         const match = existingItems.find(
           (ex) => ex.name.toLowerCase().trim() === it.name?.toLowerCase().trim()
         );
 
         return {
-          id: 'draft_' + idx,
+          id: 'draft_' + idx + '_' + Date.now(),
           name: it.name || 'Unknown Item',
-          quantity: it.quantity || 1,
+          quantity: Number(it.quantity) || 1,
           unit: it.unit || 'piece',
-          buyPrice: it.buyPrice || 0,
-          totalPrice: it.totalPrice || (it.quantity || 1) * (it.buyPrice || 0),
-          suggestedSellPrice: it.suggestedSellPrice || (it.buyPrice ? Math.round(it.buyPrice * 1.15) : 0),
+          buyPrice: Number(it.buyPrice) || 0,
+          totalPrice: Number(it.totalPrice) || (Number(it.quantity) || 1) * (Number(it.buyPrice) || 0),
+          suggestedSellPrice: Number(it.suggestedSellPrice) || (it.buyPrice ? Math.round(Number(it.buyPrice) * 1.15) : 0),
           suggestedCategory: it.suggestedCategory || 'general_items',
           packetSize: it.packetSize,
-          spoilQuickly: it.spoilQuickly || false,
-          exchangeableOnSpoil: it.exchangeableOnSpoil || false,
+          spoilQuickly: Boolean(it.spoilQuickly),
+          exchangeableOnSpoil: Boolean(it.exchangeableOnSpoil),
           matchedItemId: match ? match.id : undefined,
         };
       });
@@ -255,11 +312,10 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
     } catch (err: any) {
       console.error('Scan bill error:', err);
       setErrorMessage(
-        lang === 'hi'
-          ? 'बिल स्कैन करने में समस्या हुई।'
-          : lang === 'pa'
-          ? 'ਬਿੱਲ ਸਕੈਨ ਕਰਨ ਵਿੱਚ ਦਿੱਕਤ ਆਈ।'
-          : err.message || 'Error communicating with AI bill scanner.'
+        err?.message ||
+        (lang === 'hi'
+          ? 'बिल स्कैन करने में समस्या हुई। कृपया दोबारा प्रयास करें या नमूना पर्ची देखें।'
+          : 'Error communicating with AI bill scanner. Please try again or load sample bill.')
       );
     } finally {
       setIsAnalyzing(false);
@@ -333,8 +389,8 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
             <div>
               <div className="flex items-center gap-1.5">
                 <h3 className="font-bold text-base">{t.scanBillTitle}</h3>
-                <span className="text-[10px] bg-[#D9A62E] text-[#1E4632] font-extrabold px-1.5 py-0.2 rounded-md">
-                  Gemini 3.8
+                <span className="text-[10px] bg-[#D9A62E] text-[#1E4632] font-extrabold px-1.5 py-0.5 rounded-md">
+                  Gemini AI
                 </span>
               </div>
               <p className="text-[11px] text-[#FAF7F0]/80">{t.scanBillSubtitle}</p>
@@ -353,88 +409,58 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
           {/* Upload / Capture Stage */}
           {!hasScanned && !isAnalyzing && (
             <div className="space-y-4">
-              {/* Dual Action Options: Camera vs Gallery */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Option 1: Take Photo with Camera */}
-                <button
-                  type="button"
-                  onClick={() => cameraInputRef.current?.click()}
-                  className="p-5 rounded-2xl border-2 border-[#1E4632] bg-[#E7F0EA]/60 hover:bg-[#E7F0EA] transition text-left cursor-pointer flex flex-col justify-between gap-3 group shadow-xs"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="w-12 h-12 rounded-xl bg-[#1E4632] text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                      <Camera className="w-6 h-6 text-[#D9A62E]" />
-                    </div>
-                    <span className="text-[11px] font-bold text-[#1E4632] bg-white px-2 py-0.5 rounded-md border border-[#1E4632]/20">
-                      {lang === 'hi' ? 'कैमरा' : 'Camera'}
+              {/* Combined Compact Action Bar: Camera + Gallery + Inline Dropzone */}
+              <div className="bg-[#FAF7F0] border border-[#E4DFD2] rounded-2xl p-3 shadow-2xs space-y-2">
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Camera Button */}
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="py-2.5 px-3 bg-[#1E4632] hover:bg-[#153424] text-white rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition active:scale-[0.98] shadow-xs cursor-pointer"
+                  >
+                    <Camera className="w-4 h-4 text-[#D9A62E] shrink-0" />
+                    <span className="truncate">
+                      {lang === 'hi' ? 'कैमरे से फ़ोटो लें' : lang === 'pa' ? 'ਕੈਮਰੇ ਨਾਲ ਫ਼ੋਟੋ' : 'Camera Photo'}
                     </span>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-[#1E4632]">
-                      {lang === 'hi' ? 'कैमरे से फ़ोटो खींचें' : lang === 'pa' ? 'ਕੈਮਰੇ ਨਾਲ ਫ਼ੋਟੋ ਲਓ' : 'Take Photo with Camera'}
-                    </h4>
-                    <p className="text-[11px] text-[#726C60] mt-0.5">
-                      {lang === 'hi'
-                        ? 'दुकान में सीधे पर्चे की ताज़ा फ़ोटो लें'
-                        : lang === 'pa'
-                        ? 'ਦੁਕਾਨ ਤੇ ਸਿੱਧੀ ਪਰਚੇ ਦੀ ਫ਼ੋਟੋ ਖਿੱਚੋ'
-                        : 'Capture wholesale bill directly with camera'}
-                    </p>
-                  </div>
-                </button>
+                  </button>
 
-                {/* Option 2: Upload from Phone Gallery */}
-                <button
-                  type="button"
+                  {/* Gallery Button */}
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="py-2.5 px-3 bg-white hover:bg-[#F4EFE6] text-[#1E4632] border border-[#1E4632]/30 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition active:scale-[0.98] shadow-xs cursor-pointer"
+                  >
+                    <ImageIcon className="w-4 h-4 text-[#2F6B4F] shrink-0" />
+                    <span className="truncate">
+                      {lang === 'hi' ? 'गैलरी से चुनें' : lang === 'pa' ? 'ਗੈਲਰੀ ਵਿੱਚੋਂ' : 'From Gallery'}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Inline Drag / Drop & Quick Subtext */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleDrop}
                   onClick={() => galleryInputRef.current?.click()}
-                  className="p-5 rounded-2xl border-2 border-dashed border-[#2F6B4F]/50 bg-white hover:bg-[#FAF7F0] transition text-left cursor-pointer flex flex-col justify-between gap-3 group shadow-xs"
+                  className={`py-1.5 px-3 rounded-lg border border-dashed text-center cursor-pointer transition text-[11px] font-medium flex items-center justify-center gap-1.5 ${
+                    isDragging
+                      ? 'border-[#1E4632] bg-[#E7F0EA] text-[#1E4632]'
+                      : 'border-[#D9D3C5] bg-white/70 text-[#726C60] hover:bg-white hover:text-[#1E4632]'
+                  }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="w-12 h-12 rounded-xl bg-[#FAF7F0] text-[#1E4632] border border-[#E4DFD2] flex items-center justify-center group-hover:scale-105 transition-transform">
-                      <ImageIcon className="w-6 h-6 text-[#2F6B4F]" />
-                    </div>
-                    <span className="text-[11px] font-bold text-[#726C60] bg-[#FAF7F0] px-2 py-0.5 rounded-md border border-[#E4DFD2]">
-                      {lang === 'hi' ? 'गैलरी / फ़ाइल' : 'Gallery / File'}
-                    </span>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-[#262421]">
-                      {lang === 'hi' ? 'गैलरी से फ़ोटो चुनें' : lang === 'pa' ? 'ਗੈਲਰੀ ਵਿੱਚੋਂ ਫ਼ੋਟੋ ਚੁਣੋ' : 'Upload from Gallery'}
-                    </h4>
-                    <p className="text-[11px] text-[#726C60] mt-0.5">
-                      {lang === 'hi'
-                        ? 'फ़ोन गैलरी, WhatsApp या डाउनलोड की गई फ़ोटो'
-                        : lang === 'pa'
-                        ? 'ਫ਼ੋਨ ਗੈਲਰੀ ਜਾਂ WhatsApp ਤੋਂ ਫ਼ੋਟੋ ਚੁਣੋ'
-                        : 'Choose saved photo, screenshot or PDF'}
-                    </p>
-                  </div>
-                </button>
-              </div>
-
-              {/* Drag and Drop Dropzone for Desktop / File Explorer */}
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                onClick={() => galleryInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition flex items-center justify-center gap-2 ${
-                  isDragging
-                    ? 'border-[#1E4632] bg-[#E7F0EA]'
-                    : 'border-[#E4DFD2] bg-[#FAF7F0] hover:bg-[#E7F0EA]/30'
-                }`}
-              >
-                <Upload className="w-4 h-4 text-[#2F6B4F]" />
-                <span className="text-xs font-semibold text-[#726C60]">
-                  {lang === 'hi'
-                    ? 'या यहाँ पर्ची की फ़ोटो ड्रैग करें (JPG, PNG)'
-                    : lang === 'pa'
-                    ? 'ਜਾਂ ਇੱਥੇ ਪਰਚੀ ਦੀ ਫ਼ੋਟੋ ਡ੍ਰੈਗ ਕਰੋ'
-                    : 'Or drag & drop invoice image here (JPG, PNG)'}
-                </span>
+                  <Upload className="w-3.5 h-3.5 text-[#2F6B4F] shrink-0" />
+                  <span className="truncate">
+                    {lang === 'hi'
+                      ? 'या पर्चे की फ़ोटो (JPG, PNG) यहाँ खींच कर लाएं'
+                      : lang === 'pa'
+                      ? 'ਜਾਂ ਪਰਚੇ ਦੀ ਫ਼ੋਟੋ ਇੱਥੇ ਖਿੱਚ ਕੇ ਲਿਆਓ'
+                      : 'Or drop bill image here (auto-compressed)'}
+                  </span>
+                </div>
               </div>
 
               {/* Hidden Inputs */}
@@ -457,7 +483,7 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
               />
 
               {/* Sample Bill Button */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-[#E4DFD2] bg-white">
+              <div className="flex items-center justify-between p-2.5 rounded-xl border border-[#E4DFD2] bg-white">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-[#2F6B4F]" />
                   <span className="text-xs font-semibold text-[#262421]">
@@ -489,11 +515,33 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
             </div>
           )}
 
-          {/* Error notice */}
+          {/* Error notice with instant recovery actions */}
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-[#F8E6E4] text-[#C1443B] text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
+            <div className="p-3.5 rounded-xl bg-[#FDF2F2] border border-[#F8B4B4] text-[#9B1C1C] text-xs space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="font-medium leading-relaxed">{errorMessage}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#F8B4B4]/40">
+                <button
+                  type="button"
+                  onClick={handleLoadDemoBill}
+                  className="px-2.5 py-1 rounded-md bg-[#1E4632] text-white font-bold text-[11px] hover:bg-[#153424] transition cursor-pointer"
+                >
+                  {lang === 'hi' ? '📄 नमूना पर्ची लोड करें' : lang === 'pa' ? '📄 ਨਮੂਨਾ ਬਿੱਲ ਲੋਡ ਕਰੋ' : '📄 Load Sample Bill'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    setImagePreview(null);
+                    setHasScanned(false);
+                  }}
+                  className="px-2.5 py-1 rounded-md bg-white border border-[#F8B4B4] text-[#9B1C1C] font-semibold text-[11px] hover:bg-[#FDF2F2] transition cursor-pointer"
+                >
+                  {lang === 'hi' ? 'दोबारा कोशिश करें' : 'Try Again'}
+                </button>
+              </div>
             </div>
           )}
 
