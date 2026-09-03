@@ -20,6 +20,7 @@ import {
 import { useShop } from '../context/ShopContext';
 import { getTranslation } from '../i18n/translations';
 import { Customer } from '../types';
+import { useBackHandler } from '../hooks/useBackHandler';
 
 interface UdhaarScreenProps {
   // Can accept initial customer or trigger
@@ -46,6 +47,11 @@ export const UdhaarScreen: React.FC<UdhaarScreenProps> = () => {
   const [txAmount, setTxAmount] = useState('');
   const [txNote, setTxNote] = useState('');
   const [txError, setTxError] = useState('');
+
+  // Back button handling: closes transaction modal, add customer modal, or customer passbook view smoothly
+  useBackHandler(txType !== null, () => setTxType(null), 'udhaarTxModal');
+  useBackHandler(isAddCustomerOpen, () => setIsAddCustomerOpen(false), 'addCustomerModal');
+  useBackHandler(selectedCustomer !== null, () => setSelectedCustomer(null), 'selectedCustomerPassbook');
 
   // Filter customers
   const filteredCustomers = useMemo(() => {

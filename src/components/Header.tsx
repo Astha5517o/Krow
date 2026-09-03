@@ -3,6 +3,7 @@ import { Mic, Globe, Download, Sparkles, Check, ChevronDown, Store, Trash2, Edit
 import { useShop } from '../context/ShopContext';
 import { getTranslation } from '../i18n/translations';
 import { Language, ShopType } from '../types';
+import { useBackHandler } from '../hooks/useBackHandler';
 
 interface HeaderProps {
   onOpenVoice: () => void;
@@ -16,6 +17,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenVoice, onOpenInstallGuide 
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showEditShopModal, setShowEditShopModal] = useState(false);
+
+  // Close edit shop modal on back button press
+  useBackHandler(showEditShopModal, () => setShowEditShopModal(false), 'editShopModal');
+  useBackHandler(showProfileMenu, () => setShowProfileMenu(false), 'profileMenu');
+  useBackHandler(showLangMenu, () => setShowLangMenu(false), 'langMenu');
 
   // Shop details form state
   const [editName, setEditName] = useState(profile?.shopName || '');

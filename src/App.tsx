@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShopProvider, useShop } from './context/ShopContext';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
@@ -12,9 +12,12 @@ import { ScanBillModal } from './components/ScanBillModal';
 import { OrderListModal } from './components/OrderListModal';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { AuthScreen } from './components/AuthScreen';
+import { useBackHandler } from './hooks/useBackHandler';
+import { setNavigationCallbacks } from './utils/navigationStack';
 
 function AppContent() {
-  const { activeScreen, setActiveScreen } = useShop();
+  const { activeScreen, setActiveScreen, profile, showToast } = useShop();
+  const lang = profile?.language || 'hi';
 
   // Modal states
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
@@ -22,6 +25,34 @@ function AppContent() {
   const [isScanBillOpen, setIsScanBillOpen] = useState(false);
   const [isOrderListOpen, setIsOrderListOpen] = useState(false);
   const [stockPrefillName, setStockPrefillName] = useState<string | null>(null);
+
+  // Configure back navigation interceptor:
+  // 1. Prevents accidental app exit/refresh on single back click on home screen
+  // 2. Warns the user to press back again within 2s if they actually want to exit
+  useEffect(() => {
+    setNavigationCallbacks({
+      isHome: () => activeScreen === 'home',
+      showExitToast: () => {
+        showToast(
+          lang === 'hi'
+            ? 'ऐप से बाहर जाने के लिए दोबारा बैक दबाएं'
+            : lang === 'pa'
+            ? 'ਐਪ ਤੋਂ ਬਾਹਰ ਜਾਣ ਲਈ ਦੁਬਾਰਾ ਬੈਕ ਦਬਾਓ'
+            : 'Press back again to exit the app',
+          'info'
+        );
+      },
+    });
+  }, [activeScreen, lang, showToast]);
+
+  // Back button closes modals first without restarting or leaving app
+  useBackHandler(isVoiceOpen, () => setIsVoiceOpen(false), 'voiceModal');
+  useBackHandler(isNightCountOpen, () => setIsNightCountOpen(false), 'nightCountModal');
+  useBackHandler(isScanBillOpen, () => setIsScanBillOpen(false), 'scanBillModal');
+  useBackHandler(isOrderListOpen, () => setIsOrderListOpen(false), 'orderListModal');
+
+  // If user is on Stock or Udhaar screen, back button brings them back to Home
+  useBackHandler(activeScreen !== 'home', () => setActiveScreen('home'), `screen_${activeScreen}`);
 
   // Directly show Main Application (Login system removed for testing experience)
   return (

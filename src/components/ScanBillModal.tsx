@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import {
   Camera,
   Upload,
+  Image as ImageIcon,
   Sparkles,
   X,
   Check,
@@ -31,7 +32,8 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
   const t = getTranslation(lang);
   const categories = getCategoriesByShopType(shopType);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [vendorName, setVendorName] = useState<string>('');
@@ -39,12 +41,17 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
   const [draftItems, setDraftItems] = useState<ScannedBillDraftItem[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasScanned, setHasScanned] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
-  if (!isOpen) return null;
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const processFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage(
+        lang === 'hi'
+          ? 'कृपया केवल फ़ोटो (JPG, PNG आदि) चुनें।'
+          : 'Please select an image file (JPG, PNG, etc.).'
+      );
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -54,6 +61,24 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
     };
     reader.readAsDataURL(file);
   };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  if (!isOpen) return null;
 
   // Demo bill option for instant testing without needing paper
   const handleLoadDemoBill = () => {
@@ -328,32 +353,108 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
           {/* Upload / Capture Stage */}
           {!hasScanned && !isAnalyzing && (
             <div className="space-y-4">
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-[#2F6B4F]/40 rounded-2xl p-8 bg-[#FAF7F0] hover:bg-[#E7F0EA]/40 transition text-center cursor-pointer flex flex-col items-center justify-center gap-3"
-              >
-                <div className="w-14 h-14 rounded-2xl bg-[#1E4632] text-white flex items-center justify-center shadow-md">
-                  <Camera className="w-7 h-7" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-base text-[#1E4632]">{t.takePhoto}</h4>
-                  <p className="text-xs text-[#726C60] max-w-sm mt-1">
-                    {lang === 'hi'
-                      ? 'थोक व्यापारी की पर्ची की फ़ोटो खींचें। हाथ का लिखा या पक्का कंप्यूटर बिल दोनों चलेगा।'
-                      : lang === 'pa'
-                      ? 'ਥੋਕ ਵਪਾਰੀ ਦੀ ਪਰਚੀ ਦੀ ਫ਼ੋਟੋ ਖਿੱਚੋ। ਹੱਥ ਦਾ ਲਿਖਿਆ ਜਾਂ ਕੰਪਿਊਟਰ ਬਿੱਲ ਦੋਵੇਂ ਚੱਲਣਗੇ।'
-                      : 'Take a clear photo of your wholesaler receipt or invoice.'}
-                  </p>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
+              {/* Dual Action Options: Camera vs Gallery */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Option 1: Take Photo with Camera */}
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="p-5 rounded-2xl border-2 border-[#1E4632] bg-[#E7F0EA]/60 hover:bg-[#E7F0EA] transition text-left cursor-pointer flex flex-col justify-between gap-3 group shadow-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-12 h-12 rounded-xl bg-[#1E4632] text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                      <Camera className="w-6 h-6 text-[#D9A62E]" />
+                    </div>
+                    <span className="text-[11px] font-bold text-[#1E4632] bg-white px-2 py-0.5 rounded-md border border-[#1E4632]/20">
+                      {lang === 'hi' ? 'कैमरा' : 'Camera'}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-[#1E4632]">
+                      {lang === 'hi' ? 'कैमरे से फ़ोटो खींचें' : lang === 'pa' ? 'ਕੈਮਰੇ ਨਾਲ ਫ਼ੋਟੋ ਲਓ' : 'Take Photo with Camera'}
+                    </h4>
+                    <p className="text-[11px] text-[#726C60] mt-0.5">
+                      {lang === 'hi'
+                        ? 'दुकान में सीधे पर्चे की ताज़ा फ़ोटो लें'
+                        : lang === 'pa'
+                        ? 'ਦੁਕਾਨ ਤੇ ਸਿੱਧੀ ਪਰਚੇ ਦੀ ਫ਼ੋਟੋ ਖਿੱਚੋ'
+                        : 'Capture wholesale bill directly with camera'}
+                    </p>
+                  </div>
+                </button>
+
+                {/* Option 2: Upload from Phone Gallery */}
+                <button
+                  type="button"
+                  onClick={() => galleryInputRef.current?.click()}
+                  className="p-5 rounded-2xl border-2 border-dashed border-[#2F6B4F]/50 bg-white hover:bg-[#FAF7F0] transition text-left cursor-pointer flex flex-col justify-between gap-3 group shadow-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-12 h-12 rounded-xl bg-[#FAF7F0] text-[#1E4632] border border-[#E4DFD2] flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <ImageIcon className="w-6 h-6 text-[#2F6B4F]" />
+                    </div>
+                    <span className="text-[11px] font-bold text-[#726C60] bg-[#FAF7F0] px-2 py-0.5 rounded-md border border-[#E4DFD2]">
+                      {lang === 'hi' ? 'गैलरी / फ़ाइल' : 'Gallery / File'}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-[#262421]">
+                      {lang === 'hi' ? 'गैलरी से फ़ोटो चुनें' : lang === 'pa' ? 'ਗੈਲਰੀ ਵਿੱਚੋਂ ਫ਼ੋਟੋ ਚੁਣੋ' : 'Upload from Gallery'}
+                    </h4>
+                    <p className="text-[11px] text-[#726C60] mt-0.5">
+                      {lang === 'hi'
+                        ? 'फ़ोन गैलरी, WhatsApp या डाउनलोड की गई फ़ोटो'
+                        : lang === 'pa'
+                        ? 'ਫ਼ੋਨ ਗੈਲਰੀ ਜਾਂ WhatsApp ਤੋਂ ਫ਼ੋਟੋ ਚੁਣੋ'
+                        : 'Choose saved photo, screenshot or PDF'}
+                    </p>
+                  </div>
+                </button>
               </div>
+
+              {/* Drag and Drop Dropzone for Desktop / File Explorer */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                onClick={() => galleryInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition flex items-center justify-center gap-2 ${
+                  isDragging
+                    ? 'border-[#1E4632] bg-[#E7F0EA]'
+                    : 'border-[#E4DFD2] bg-[#FAF7F0] hover:bg-[#E7F0EA]/30'
+                }`}
+              >
+                <Upload className="w-4 h-4 text-[#2F6B4F]" />
+                <span className="text-xs font-semibold text-[#726C60]">
+                  {lang === 'hi'
+                    ? 'या यहाँ पर्ची की फ़ोटो ड्रैग करें (JPG, PNG)'
+                    : lang === 'pa'
+                    ? 'ਜਾਂ ਇੱਥੇ ਪਰਚੀ ਦੀ ਫ਼ੋਟੋ ਡ੍ਰੈਗ ਕਰੋ'
+                    : 'Or drag & drop invoice image here (JPG, PNG)'}
+                </span>
+              </div>
+
+              {/* Hidden Inputs */}
+              {/* 1. Camera Input (forces hardware camera on mobile) */}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              {/* 2. Gallery Input (opens photo gallery/file picker on mobile & desktop) */}
+              <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
 
               {/* Sample Bill Button */}
               <div className="flex items-center justify-between p-3 rounded-xl border border-[#E4DFD2] bg-white">

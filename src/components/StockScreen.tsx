@@ -21,6 +21,7 @@ import { useShop } from '../context/ShopContext';
 import { getTranslation } from '../i18n/translations';
 import { StockItem } from '../types';
 import { getCategoriesByShopType, CategoryDef } from '../data/categories';
+import { useBackHandler } from '../hooks/useBackHandler';
 
 interface StockScreenProps {
   onOpenNightCount: () => void;
@@ -67,6 +68,13 @@ export const StockScreen: React.FC<StockScreenProps> = ({
   // Quick sell custom qty modal
   const [quickSellItem, setQuickSellItem] = useState<StockItem | null>(null);
   const [customSellQty, setCustomSellQty] = useState('1');
+
+  // Back button dismisses modals without restarting app
+  useBackHandler(isModalOpen, () => {
+    setIsModalOpen(false);
+    setEditingItem(null);
+  }, 'stockAddEditModal');
+  useBackHandler(quickSellItem !== null, () => setQuickSellItem(null), 'stockQuickSellModal');
 
   // Handle prefill from voice or external action
   React.useEffect(() => {
