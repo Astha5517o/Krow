@@ -1,0 +1,221 @@
+{
+  "shop_mtl0fvg1_ex2n": {
+    "id": "shop_mtl0fvg1_ex2n",
+    "identifier": "7589325161",
+    "password": "123789",
+    "shopName": "KAR General Store",
+    "shopType": "general_store",
+    "language": "hi",
+    "onboarded": true,
+    "items": [
+      {
+        "id": "item_gs_1",
+        "name": "Amul Taaza Toned Milk (500ml)",
+        "category": "milk_dairy",
+        "unit": "pouch",
+        "quantity": 5,
+        "reorderLevel": 15,
+        "buyPrice": 25.5,
+        "sellPrice": 27,
+        "packetSize": 12,
+        "spoilQuickly": true,
+        "exchangeableOnSpoil": false,
+        "createdAt": "2026-09-03T04:13:57.579Z",
+        "updatedAt": "2026-09-03T04:13:57.579Z"
+      },
+      {
+        "id": "item_gs_2",
+        "name": "Harvest Gold White Bread (Large)",
+        "category": "bread_bakery",
+        "unit": "packet",
+        "quantity": 4,
+        "reorderLevel": 8,
+        "buyPrice": 42,
+        "sellPrice": 50,
+        "packetSize": 6,
+        "spoilQuickly": true,
+        "exchangeableOnSpoil": true,
+        "createdAt": "2026-09-03T04:13:57.579Z",
+        "updatedAt": "2026-09-03T04:13:57.579Z"
+      },
+      {
+        "id": "item_gs_3",
+        "name": "Dettol Original Bath Soap (75g)",
+        "category": "cleaning_supplies",
+        "unit": "piece",
+        "quantity": 14,
+        "reorderLevel": 10,
+        "buyPrice": 34,
+        "sellPrice": 40,
+        "packetSize": 4,
+        "spoilQuickly": false,
+        "exchangeableOnSpoil": false,
+        "createdAt": "2026-09-03T04:13:57.579Z",
+        "updatedAt": "2026-09-03T04:13:57.579Z"
+      },
+      {
+        "id": "item_gs_4",
+        "name": "Parle-G Glucose Biscuits (80g)",
+        "category": "biscuits_snacks",
+        "unit": "packet",
+        "quantity": 28,
+        "reorderLevel": 15,
+        "buyPrice": 8.5,
+        "sellPrice": 10,
+        "packetSize": 24,
+        "spoilQuickly": false,
+        "exchangeableOnSpoil": false,
+        "createdAt": "2026-09-03T04:13:57.579Z",
+        "updatedAt": "2026-09-03T04:13:57.579Z"
+      },
+      {
+        "id": "item_gs_5",
+        "name": "Lay's India's Magic Masala (₹20)",
+        "category": "chips_namkeen",
+        "unit": "packet",
+        "quantity": 8,
+        "reorderLevel": 12,
+        "buyPrice": 16.5,
+        "sellPrice": 20,
+        "packetSize": 12,
+        "spoilQuickly": false,
+        "exchangeableOnSpoil": false,
+        "createdAt": "2026-09-03T04:13:57.579Z",
+        "updatedAt": "2026-09-03T04:13:57.579Z"
+      },
+      {
+        "id": "item_gs_6",
+        "name": "Coca-Cola (750ml Pet Bottle)",
+        "category": "cold_drinks",
+        "unit": "bottle",
+        "quantity": 18,
+        "reorderLevel": 8,
+        "buyPrice": 35,
+        "sellPrice": 40,
+        "packetSize": 12,
+        "spoilQuickly": false,
+        "exchangeableOnSpoil": false,
+        "createdAt": "2026-09-03T04:13:57.579Z",
+        "updatedAt": "2026-09-03T04:13:57.579Z"
+      },
+      {
+        "id": "item_gs_7",
+        "name": "Tata Salt Vaccum Evaporated (1kg)",
+        "category": "spices",
+        "unit": "packet",
+        "quantity": 22,
+        "reorderLevel": 10,
+        "buyPrice": 23,
+        "sellPrice": 28,
+        "packetSize": 25,
+        "spoilQuickly": false,
+        "exchangeableOnSpoil": false,
+        "createdAt": "2026-09-03T04:13:57.579Z",
+        "updatedAt": "2026-09-03T04:13:57.579Z"
+      },
+      {
+        "id": "item_gs_8",
+        "name": "Gold Flake Kings Cigarette",
+        "category": "tobacco_cigarettes",
+        "unit": "packet",
+        "quantity": 10,
+        "reorderLevel": 6,
+        "buyPrice": 165,
+        "sellPrice": 180,
+        "packetSize": 10,
+        "spoilQuickly": false,
+        "exchangeableOnSpoil": false,
+        "createdAt": "2026-09-03T04:13:57.579Z",
+        "updatedAt": "2026-09-03T04:13:57.579Z"
+      }
+    ],
+    "customers": [
+      {
+        "id": "cust_sample_1",
+        "name": "रमेश वर्मा (वर्मा जी)",
+        "phone": "9876543210",
+        "address": "Gali No. 3, Near Temple",
+        "balance": 380,
+        "transactions": [
+          {
+            "id": "tx_1",
+            "customerId": "cust_sample_1",
+            "customerName": "Ramesh Verma",
+            "type": "credit_given",
+            "amount": 380,
+            "note": "2 Milk + Bread + Butter",
+            "balanceAfter": 380,
+            "timestamp": "2026-09-03T04:13:57.579Z"
+          }
+        ],
+        "createdAt": "2026-09-03T04:13:57.579Z",
+        "updatedAt": "2026-09-03T04:13:57.579Z"
+      },
+      {
+        "id": "cust_sample_2",
+        "name": "सोनू भाई (ड्राइवर)",
+        "phone": "9811223344",
+        "address": "Main Road",
+        "balance": 140,
+        "transactions": [
+          {
+            "id": "tx_2",
+            "customerId": "cust_sample_2",
+            "customerName": "Sonu Bhai",
+            "type": "credit_given",
+            "amount": 240,
+            "note": "Cigarettes & Cold Drink",
+            "balanceAfter": 240,
+            "timestamp": "2026-09-03T04:13:57.579Z"
+          },
+          {
+            "id": "tx_3",
+            "customerId": "cust_sample_2",
+            "customerName": "Sonu Bhai",
+            "type": "payment_received",
+            "amount": 100,
+            "note": "Cash paid in evening",
+            "balanceAfter": 140,
+            "timestamp": "2026-09-03T04:13:57.579Z"
+          }
+        ],
+        "createdAt": "2026-09-03T04:13:57.579Z",
+        "updatedAt": "2026-09-03T04:13:57.579Z"
+      }
+    ],
+    "sales": [],
+    "nightCounts": [],
+    "createdAt": "2026-09-03T04:13:48.145Z",
+    "updatedAt": "2026-09-03T04:29:40.501Z"
+  },
+  "shop_mtl1gwaq_ch6v": {
+    "id": "shop_mtl1gwaq_ch6v",
+    "identifier": "testuser123",
+    "password": "password123",
+    "shopName": "Test Shop",
+    "shopType": "general_store",
+    "language": "hi",
+    "onboarded": false,
+    "items": [],
+    "customers": [],
+    "sales": [],
+    "nightCounts": [],
+    "createdAt": "2026-09-03T04:42:35.523Z",
+    "updatedAt": "2026-09-03T04:42:35.523Z"
+  },
+  "shop_mtl1l2z1_c5xl": {
+    "id": "shop_mtl1l2z1_c5xl",
+    "identifier": "9988776655",
+    "password": "mypassword",
+    "shopName": "Sharma General Store",
+    "shopType": "general_store",
+    "language": "hi",
+    "onboarded": false,
+    "items": [],
+    "customers": [],
+    "sales": [],
+    "nightCounts": [],
+    "createdAt": "2026-09-03T04:45:50.797Z",
+    "updatedAt": "2026-09-03T04:45:50.797Z"
+  }
+}

@@ -8,13 +8,24 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const PORT = 3000;
-const DATA_DIR = path.join(process.cwd(), "data");
-const DB_FILE = path.join(DATA_DIR, "shops.json");
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+// Resolve safe database directory (fallback to /tmp if cwd is read-only in serverless/container deployment)
+let DATA_DIR = path.join(process.cwd(), "data");
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch {
+  DATA_DIR = path.join("/tmp", "krow_data");
+  if (!fs.existsSync(DATA_DIR)) {
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    } catch (e) {
+      console.warn("Could not create /tmp/krow_data directory:", e);
+    }
+  }
 }
+const DB_FILE = path.join(DATA_DIR, "shops.json");
 
 // Database helper
 interface ShopRecord {
@@ -74,6 +85,17 @@ function getGenAI(): GoogleGenAI {
 async function startServer() {
   const app = express();
 
+  // CORS support for all deployed origins, previews, and iframes
+  app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // Middleware
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
@@ -84,7 +106,7 @@ async function startServer() {
   });
 
   // Auth: Signup
-  app.post("/api/auth/signup", (req, res) => {
+  app.post(["/api/auth/signup", "/api/auth/signup/"], (req, res) => {
     try {
       const { identifier, password, shopName, shopType, language } = req.body;
       if (!identifier || !password) {
@@ -130,7 +152,7 @@ async function startServer() {
   });
 
   // Auth: Login
-  app.post("/api/auth/login", (req, res) => {
+  app.post(["/api/auth/login", "/api/auth/login/"], (req, res) => {
     try {
       const { identifier, password } = req.body;
       if (!identifier || !password) {
@@ -158,7 +180,7 @@ async function startServer() {
   });
 
   // Auth: Forgot Password
-  app.post("/api/auth/forgot-password", (req, res) => {
+  app.post(["/api/auth/forgot-password", "/api/auth/forgot-password/"], (req, res) => {
     try {
       const { identifier } = req.body;
       if (!identifier) {
@@ -182,7 +204,7 @@ async function startServer() {
   });
 
   // Auth: Reset Password
-  app.post("/api/auth/reset-password", (req, res) => {
+  app.post(["/api/auth/reset-password", "/api/auth/reset-password/"], (req, res) => {
     try {
       const { identifier, code, newPassword } = req.body;
       if (!identifier || !newPassword) {
@@ -211,7 +233,7 @@ async function startServer() {
   });
 
   // Shop Data: Get
-  app.get("/api/shop/data", (req, res) => {
+  app.get(["/api/shop/data", "/api/shop/data/"], (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       const token = authHeader?.replace("Bearer ", "") || (req.query.token as string);
@@ -234,7 +256,7 @@ async function startServer() {
   });
 
   // Shop Data: Sync/Save
-  app.post("/api/shop/sync", (req, res) => {
+  app.post(["/api/shop/sync", "/api/shop/sync/"], (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       const token = authHeader?.replace("Bearer ", "") || (req.body.token as string);
@@ -287,7 +309,7 @@ async function startServer() {
   });
 
   // AI-Powered Bill Scanning with Gemini
-  app.post("/api/scan-bill", async (req, res) => {
+  app.post(["/api/scan-bill", "/api/scan-bill/"], async (req, res) => {
     try {
       const { imageBase64, mimeType = "image/jpeg", shopType = "general_store", language = "hi" } = req.body;
 
