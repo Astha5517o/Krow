@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Mic, Globe, LogOut, Download, Sparkles, Check, ChevronDown } from 'lucide-react';
+import { Mic, Globe, Download, Sparkles, Check, ChevronDown, Store, Trash2, Edit3, X } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { getTranslation } from '../i18n/translations';
-import { Language } from '../types';
+import { Language, ShopType } from '../types';
 
 interface HeaderProps {
   onOpenVoice: () => void;
@@ -10,17 +10,48 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onOpenVoice, onOpenInstallGuide }) => {
-  const { profile, logout, updateLanguage, setActiveScreen } = useShop();
+  const { profile, updateLanguage, setActiveScreen, updateShopProfile, clearAllData } = useShop();
   const lang = profile?.language || 'hi';
   const t = getTranslation(lang);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showEditShopModal, setShowEditShopModal] = useState(false);
+
+  // Shop details form state
+  const [editName, setEditName] = useState(profile?.shopName || '');
+  const [editType, setEditType] = useState<ShopType>(profile?.shopType || 'general_store');
+  const [editPhone, setEditPhone] = useState(profile?.identifier || '');
 
   const languages: { code: Language; label: string; native: string }[] = [
     { code: 'hi', label: 'Hindi', native: 'हिन्दी' },
     { code: 'pa', label: 'Punjabi', native: 'ਪੰਜਾਬੀ' },
     { code: 'en', label: 'English', native: 'English' },
   ];
+
+  const handleOpenEdit = () => {
+    setEditName(profile?.shopName || '');
+    setEditType(profile?.shopType || 'general_store');
+    setEditPhone(profile?.identifier || '');
+    setShowProfileMenu(false);
+    setShowEditShopModal(true);
+  };
+
+  const handleSaveShopDetails = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateShopProfile({
+      shopName: editName.trim() || (lang === 'hi' ? 'मेरी दुकान' : 'My Shop'),
+      shopType: editType,
+      identifier: editPhone.trim(),
+    });
+    setShowEditShopModal(false);
+  };
+
+  const handleClearDataConfirm = () => {
+    setShowProfileMenu(false);
+    if (window.confirm(lang === 'hi' ? 'क्या आप वाकई सारा सामान, ग्राहक और बिक्री रिकॉर्ड साफ़ करना चाहते हैं?' : 'Are you sure you want to clear all items, customers, and sales records?')) {
+      clearAllData();
+    }
+  };
 
   return (
     <header className="sticky top-0 z-30 w-full bg-[#FAF7F0] border-b border-[#E4DFD2] px-3.5 py-2.5 sm:px-6 shadow-xs">
@@ -131,28 +162,151 @@ export const Header: React.FC<HeaderProps> = ({ onOpenVoice, onOpenInstallGuide 
             </button>
 
             {showProfileMenu && (
-              <div className="absolute right-0 mt-1.5 w-52 bg-white border border-[#E4DFD2] rounded-xl shadow-lg p-2 z-40">
-                <div className="px-2 py-1.5 border-b border-[#E4DFD2] mb-1">
+              <div className="absolute right-0 mt-1.5 w-64 bg-white border border-[#E4DFD2] rounded-2xl shadow-xl p-3 z-40">
+                <div className="px-2 py-2 bg-[#FAF7F0] rounded-xl border border-[#E4DFD2]/60 mb-2.5">
                   <p className="text-xs font-bold text-[#1E4632] truncate">
-                    {profile?.shopName || (lang === 'hi' ? 'मेरी दुकान' : lang === 'pa' ? 'ਮੇਰੀ ਦੁਕਾਨ' : 'My Shop')}
+                    {profile?.shopName || (lang === 'hi' ? 'मेरी दुकान' : 'My Shop')}
                   </p>
-                  <p className="text-[11px] text-[#726C60] truncate">{profile?.identifier}</p>
+                  <p className="text-[11px] text-[#726C60] truncate mt-0.5">
+                    {profile?.shopType === 'stationery'
+                      ? (lang === 'hi' ? 'स्टेशनरी एवं यूनिफॉर्म' : 'Stationery & Uniforms')
+                      : (lang === 'hi' ? 'किराना एवं जनरल स्टोर' : 'Kirana & General Store')}
+                  </p>
+                  {profile?.identifier && (
+                    <p className="text-[10px] text-[#A29C8E] mt-0.5">{profile.identifier}</p>
+                  )}
                 </div>
+
+                {/* Edit Shop Details Action */}
                 <button
-                  onClick={() => {
-                    setShowProfileMenu(false);
-                    logout();
-                  }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-[#C1443B] hover:bg-[#F8E6E4] font-medium transition cursor-pointer"
+                  onClick={handleOpenEdit}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs text-[#1E4632] bg-white hover:bg-[#E7F0EA] font-semibold transition cursor-pointer border border-[#E4DFD2] mb-1.5"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>{t.logoutBtn}</span>
+                  <span className="flex items-center gap-2">
+                    <Edit3 className="w-3.5 h-3.5 text-[#2F6B4F]" />
+                    {lang === 'hi' ? 'दुकान की जानकारी बदलें' : 'Edit Shop Details'}
+                  </span>
+                </button>
+
+                {/* Clear all data */}
+                <button
+                  onClick={handleClearDataConfirm}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#C1443B] hover:bg-[#F8E6E4] font-medium transition cursor-pointer border border-dashed border-[#C1443B]/30"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-[#C1443B]" />
+                  <span>{lang === 'hi' ? 'स्टोरेज पूरी तरह साफ़ करें' : 'Clear All Data'}</span>
                 </button>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Edit Shop Details Modal */}
+      {showEditShopModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 border border-[#E4DFD2] shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E4DFD2] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[#E7F0EA] text-[#1E4632] flex items-center justify-center">
+                  <Store className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[#1E4632]">
+                    {lang === 'hi' ? 'दुकान की जानकारी' : 'Shop Information'}
+                  </h3>
+                  <p className="text-xs text-[#726C60]">
+                    {lang === 'hi' ? 'अपनी दुकान का नाम और प्रकार दर्ज करें' : 'Enter your shop name & type'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowEditShopModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-[#FAF7F0] flex items-center justify-center text-[#726C60] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveShopDetails} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-[#262421] mb-1">
+                  {lang === 'hi' ? 'दुकान का नाम (Shop Name)' : 'Shop Name'} *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder={lang === 'hi' ? 'उदा. शर्मा किराना स्टोर' : 'e.g. Sharma General Store'}
+                  className="w-full px-3 py-2 rounded-xl border border-[#E4DFD2] text-sm text-[#262421] focus:border-[#1E4632] focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#262421] mb-1">
+                  {lang === 'hi' ? 'दुकान का प्रकार (Store Type)' : 'Store Category'}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditType('general_store')}
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition cursor-pointer flex items-center gap-2 ${
+                      editType === 'general_store'
+                        ? 'border-[#1E4632] bg-[#E7F0EA] text-[#1E4632]'
+                        : 'border-[#E4DFD2] bg-white text-[#726C60]'
+                    }`}
+                  >
+                    <Store className="w-4 h-4 shrink-0" />
+                    <span>{lang === 'hi' ? 'किराना व जनरल' : 'Kirana Store'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditType('stationery')}
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition cursor-pointer flex items-center gap-2 ${
+                      editType === 'stationery'
+                        ? 'border-[#1E4632] bg-[#E7F0EA] text-[#1E4632]'
+                        : 'border-[#E4DFD2] bg-white text-[#726C60]'
+                    }`}
+                  >
+                    <Store className="w-4 h-4 shrink-0" />
+                    <span>{lang === 'hi' ? 'स्टेशनरी व यूनिफॉर्म' : 'Stationery'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#262421] mb-1">
+                  {lang === 'hi' ? 'मोबाइल नंबर (वैकल्पिक)' : 'Mobile Number (Optional)'}
+                </label>
+                <input
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="9876543210"
+                  className="w-full px-3 py-2 rounded-xl border border-[#E4DFD2] text-sm text-[#262421] focus:border-[#1E4632] focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowEditShopModal(false)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-[#726C60] hover:bg-[#FAF7F0] cursor-pointer"
+                >
+                  {lang === 'hi' ? 'रद्द करें' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-[#1E4632] text-white text-xs font-bold hover:bg-[#2F6B4F] cursor-pointer transition shadow-xs"
+                >
+                  {lang === 'hi' ? 'सहेजें' : 'Save Details'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

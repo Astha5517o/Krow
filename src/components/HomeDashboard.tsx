@@ -35,6 +35,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 }) => {
   const {
     profile,
+    items,
     todayProfit,
     weekProfit,
     totalUdhaarOwed,
@@ -208,7 +209,37 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           )}
         </div>
 
-        {attentionList.length === 0 ? (
+        {items.length === 0 ? (
+          <div className="py-6 text-center text-[#726C60] space-y-2">
+            <Package className="w-8 h-8 mx-auto text-[#2F6B4F]/40" />
+            <p className="text-xs font-semibold text-[#262421]">
+              {lang === 'hi'
+                ? 'अभी दुकान में कोई सामान दर्ज नहीं है।'
+                : 'No items in your store inventory yet.'}
+            </p>
+            <p className="text-[11px] text-[#726C60] max-w-xs mx-auto">
+              {lang === 'hi'
+                ? 'दुकानदार अपना सामान खुद जोड़ सकते हैं या थोक पर्चा स्कैन कर सकते हैं।'
+                : 'You can add your items manually or scan your wholesale purchase bill.'}
+            </p>
+            <div className="pt-1 flex items-center justify-center gap-2">
+              <button
+                onClick={() => setActiveScreen('stock')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1E4632] text-white text-xs font-bold hover:bg-[#2F6B4F] transition cursor-pointer"
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>{lang === 'hi' ? 'सामान जोड़ें' : 'Add Item'}</span>
+              </button>
+              <button
+                onClick={onOpenScanBill}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-[#2F6B4F] text-[#2F6B4F] text-xs font-bold hover:bg-[#E7F0EA] transition cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>{lang === 'hi' ? 'पर्चा स्कैन करें' : 'Scan Bill'}</span>
+              </button>
+            </div>
+          </div>
+        ) : attentionList.length === 0 ? (
           <div className="py-5 text-center text-[#726C60]">
             <Package className="w-7 h-7 mx-auto text-[#2F6B4F]/40 mb-1.5" />
             <p className="text-xs font-semibold text-[#1E4632]">{t.allGoodStock}</p>

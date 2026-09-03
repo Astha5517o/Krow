@@ -14,7 +14,7 @@ import { OnboardingScreen } from './components/OnboardingScreen';
 import { AuthScreen } from './components/AuthScreen';
 
 function AppContent() {
-  const { isAuthenticated, profile, activeScreen, setActiveScreen } = useShop();
+  const { activeScreen, setActiveScreen } = useShop();
 
   // Modal states
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
@@ -23,27 +23,7 @@ function AppContent() {
   const [isOrderListOpen, setIsOrderListOpen] = useState(false);
   const [stockPrefillName, setStockPrefillName] = useState<string | null>(null);
 
-  // 1. Not logged in -> Show Authentication (Login / Signup / Forgot Password / 1-Click Demo)
-  if (!isAuthenticated) {
-    return (
-      <>
-        <ToastContainer />
-        <AuthScreen />
-      </>
-    );
-  }
-
-  // 2. Logged in for the first time -> Show 2-step Onboarding (Language -> Shop Type)
-  if (!profile?.onboarded) {
-    return (
-      <>
-        <ToastContainer />
-        <OnboardingScreen />
-      </>
-    );
-  }
-
-  // 3. Main Application (Header + Active Screen + Fixed Bottom Nav + Modals)
+  // Directly show Main Application (Login system removed for testing experience)
   return (
     <div className="min-h-screen bg-[#FAF7F0] text-[#262421] flex flex-col font-sans antialiased selection:bg-[#E7F0EA]">
       <ToastContainer />

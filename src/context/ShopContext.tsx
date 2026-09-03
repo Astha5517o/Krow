@@ -24,7 +24,16 @@ import {
   ReorderSuggestion,
   ScannedBillDraftItem,
 } from '../types';
-import { getStarterItems } from '../data/categories';
+export const DEFAULT_CLEAN_PROFILE: ShopProfile = {
+  id: 'shopkeeper_main',
+  identifier: '',
+  shopName: 'मेरी दुकान (My Shop)',
+  shopType: 'general_store',
+  language: 'hi',
+  onboarded: true,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
 
 interface Toast {
   id: string;
@@ -38,6 +47,8 @@ interface ShopContextType {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  updateShopProfile: (updates: Partial<ShopProfile>) => void;
+  clearAllData: () => void;
   login: (identifier: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   signup: (identifier: string, pass: string, shopName: string, shopType?: ShopType, lang?: Language) => Promise<{ success: boolean; error?: string }>;
   signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
@@ -93,37 +104,78 @@ const STORAGE_KEYS = {
   NIGHT_COUNTS: 'krow_night_counts',
 };
 
+const CLEAN_STORAGE_FLAG = 'krow_clean_slate_v3';
+if (typeof window !== 'undefined' && localStorage.getItem(CLEAN_STORAGE_FLAG) !== 'true') {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.ITEMS);
+    localStorage.removeItem(STORAGE_KEYS.CUSTOMERS);
+    localStorage.removeItem(STORAGE_KEYS.SALES);
+    localStorage.removeItem(STORAGE_KEYS.NIGHT_COUNTS);
+    localStorage.removeItem(STORAGE_KEYS.PROFILE);
+    localStorage.setItem(CLEAN_STORAGE_FLAG, 'true');
+  } catch {}
+}
+
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(STORAGE_KEYS.TOKEN));
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(STORAGE_KEYS.TOKEN) || 'shopkeeper_token');
   const [profile, setProfile] = useState<ShopProfile | null>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PROFILE);
-    return saved ? JSON.parse(saved) : null;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return DEFAULT_CLEAN_PROFILE;
   });
   const [items, setItems] = useState<StockItem[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.ITEMS);
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
   });
   const [customers, setCustomers] = useState<Customer[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
   });
   const [sales, setSales] = useState<Sale[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SALES);
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
   });
   const [nightCounts, setNightCounts] = useState<NightCountRecord[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.NIGHT_COUNTS);
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
   });
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [activeScreen, setActiveScreen] = useState<'home' | 'stock' | 'udhaar'>('home');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [voiceTargetName, setVoiceTargetName] = useState<string | null>(null);
 
   // Prevent saving empty state during initial load
-  const isInitialLoadDone = useRef(false);
+  const isInitialLoadDone = useRef(true);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
@@ -132,6 +184,33 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3800);
   }, []);
+
+  // Update shop profile information entered by the shopkeeper
+  const updateShopProfile = useCallback((updates: Partial<ShopProfile>) => {
+    setProfile((prev) => {
+      const updated = {
+        ...(prev || DEFAULT_CLEAN_PROFILE),
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updated));
+      return updated;
+    });
+    showToast(profile?.language === 'hi' ? 'दुकान की जानकारी अपडेट हो गई!' : 'Shop details updated!');
+  }, [profile?.language, showToast]);
+
+  // Completely wipe all storage to a clean slate
+  const clearAllData = useCallback(() => {
+    setItems([]);
+    setCustomers([]);
+    setSales([]);
+    setNightCounts([]);
+    localStorage.setItem(STORAGE_KEYS.ITEMS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.SALES, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.NIGHT_COUNTS, JSON.stringify([]));
+    showToast(profile?.language === 'hi' ? 'स्टोरेज पूरी तरह साफ़ कर दिया गया' : 'All store data cleared');
+  }, [profile?.language, showToast]);
 
   // Save to local storage for fast client caching
   useEffect(() => {
@@ -168,7 +247,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [nightCounts]);
 
-  // Load shop data from Firestore for authenticated user
+  // Load shop data from Firestore for authenticated user (if Firebase connected)
   const loadUserShopFromFirestore = useCallback(async (uid: string, fallbackIdentifier?: string, fallbackShopName?: string) => {
     try {
       const shopRef = doc(db, 'shops', uid);
@@ -179,7 +258,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const loadedProfile: ShopProfile = {
           id: uid,
           identifier: data.identifier || fallbackIdentifier || 'shopkeeper',
-          shopName: data.shopName || fallbackShopName || 'Meri Dukan',
+          shopName: data.shopName || fallbackShopName || 'वर्मा किराना स्टोर',
           shopType: data.shopType || 'general_store',
           language: data.language || 'hi',
           onboarded: data.onboarded !== undefined ? data.onboarded : true,
@@ -189,43 +268,20 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         setProfile(loadedProfile);
         setToken(uid);
-        if (Array.isArray(data.items)) setItems(data.items);
-        if (Array.isArray(data.customers)) setCustomers(data.customers);
-        if (Array.isArray(data.sales)) setSales(data.sales);
-        if (Array.isArray(data.nightCounts)) setNightCounts(data.nightCounts);
-      } else {
-        // Document does not exist yet (e.g. fresh account), initialize it
-        const newProf: ShopProfile = {
-          id: uid,
-          identifier: fallbackIdentifier || 'shopkeeper',
-          shopName: fallbackShopName || 'मेरी दुकान (My Shop)',
-          shopType: 'general_store',
-          language: 'hi',
-          onboarded: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        setProfile(newProf);
-        setToken(uid);
-
-        await setDoc(shopRef, {
-          ...newProf,
-          ownerId: uid,
-          items: [],
-          customers: [],
-          sales: [],
-          nightCounts: [],
-        }, { merge: true });
+        if (Array.isArray(data.items) && data.items.length > 0) setItems(data.items);
+        if (Array.isArray(data.customers) && data.customers.length > 0) setCustomers(data.customers);
+        if (Array.isArray(data.sales) && data.sales.length > 0) setSales(data.sales);
+        if (Array.isArray(data.nightCounts) && data.nightCounts.length > 0) setNightCounts(data.nightCounts);
       }
     } catch (err) {
-      console.warn('Could not read shop data from Firestore:', err);
+      console.warn('Could not read shop data from Firestore (operating locally):', err);
     } finally {
       isInitialLoadDone.current = true;
       setIsLoading(false);
     }
   }, []);
 
-  // Listen to Firebase Auth state changes
+  // Listen to Firebase Auth state changes (does not wipe test state when unauthenticated)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
@@ -233,12 +289,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setToken(user.uid);
         await loadUserShopFromFirestore(user.uid, user.email || undefined);
       } else {
-        setProfile(null);
-        setToken(null);
-        setItems([]);
-        setCustomers([]);
-        setSales([]);
-        setNightCounts([]);
+        // Testing mode: Keep local test profile and inventory intact
         isInitialLoadDone.current = true;
         setIsLoading(false);
       }
@@ -436,27 +487,26 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const uid = cred.user.uid;
         const demoProfile: ShopProfile = {
           id: uid,
-          identifier: '9876543210',
-          shopName: 'वर्मा किराना स्टोर (Verma Kirana Store)',
+          identifier: 'shopkeeper',
+          shopName: 'मेरी दुकान (My Shop)',
           shopType: 'general_store',
           language: 'hi',
           onboarded: true,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        const starter = getStarterItems('general_store');
         setProfile(demoProfile);
         setToken(uid);
-        setItems(starter);
+        setItems([]);
         await setDoc(doc(db, 'shops', uid), {
           ...demoProfile,
           ownerId: uid,
-          items: starter,
+          items: [],
           customers: [],
           sales: [],
           nightCounts: [],
         }, { merge: true });
-        showToast('डेमो दुकान शुरू हो गई! (Demo store ready)', 'info');
+        showToast('स्वागत है! (Welcome)', 'info');
         setIsLoading(false);
         return { success: true };
       } catch (e) {
@@ -580,79 +630,17 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Complete Onboarding
   const completeOnboarding = (language: Language, shopType: ShopType, shopName: string) => {
     if (!profile) return;
-    const starterItems = getStarterItems(shopType);
     const updatedProfile: ShopProfile = {
       ...profile,
       language,
       shopType,
-      shopName: shopName || profile.shopName,
+      shopName: shopName.trim() || profile.shopName,
       onboarded: true,
       updatedAt: new Date().toISOString(),
     };
 
     setProfile(updatedProfile);
-    if (items.length === 0) {
-      setItems(starterItems);
-    }
-    if (customers.length === 0) {
-      const now = new Date().toISOString();
-      const initialCustomers: Customer[] = [
-        {
-          id: 'cust_sample_1',
-          name: language === 'pa' ? 'ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ' : language === 'hi' ? 'रमेश वर्मा (वर्मा जी)' : 'Ramesh Verma',
-          phone: '9876543210',
-          address: 'Gali No. 3, Near Temple',
-          balance: 380,
-          transactions: [
-            {
-              id: 'tx_1',
-              customerId: 'cust_sample_1',
-              customerName: 'Ramesh Verma',
-              type: 'credit_given',
-              amount: 380,
-              note: '2 Milk + Bread + Butter',
-              balanceAfter: 380,
-              timestamp: now,
-            },
-          ],
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: 'cust_sample_2',
-          name: language === 'pa' ? 'ਮਨਦੀਪ ਕੌਰ' : language === 'hi' ? 'सोनू भाई (ड्राइवर)' : 'Sonu Bhai',
-          phone: '9811223344',
-          address: 'Main Road',
-          balance: 140,
-          transactions: [
-            {
-              id: 'tx_2',
-              customerId: 'cust_sample_2',
-              customerName: 'Sonu Bhai',
-              type: 'credit_given',
-              amount: 240,
-              note: 'Cigarettes & Cold Drink',
-              balanceAfter: 240,
-              timestamp: now,
-            },
-            {
-              id: 'tx_3',
-              customerId: 'cust_sample_2',
-              customerName: 'Sonu Bhai',
-              type: 'payment_received',
-              amount: 100,
-              note: 'Cash paid in evening',
-              balanceAfter: 140,
-              timestamp: now,
-            },
-          ],
-          createdAt: now,
-          updatedAt: now,
-        },
-      ];
-      setCustomers(initialCustomers);
-    }
-
+    localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(updatedProfile));
     showToast('दुकान सेटअप पूरा हुआ! Krow में आपका स्वागत है।');
   };
 
@@ -1004,8 +992,10 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value: ShopContextType = {
     profile,
     token,
-    isAuthenticated: !!token && !!profile,
+    isAuthenticated: true,
     isLoading,
+    updateShopProfile,
+    clearAllData,
     login,
     signup,
     signInWithGoogle,
