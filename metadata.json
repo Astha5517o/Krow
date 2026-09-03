@@ -1,0 +1,6 @@
+{
+  "name": "Krow",
+  "description": "Stock, udhaar credit ledger, and profit-tracking web app for small Indian family-run stores.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
