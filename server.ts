@@ -10,7 +10,7 @@ dotenv.config();
 const PORT = 3000;
 
 // Resolve safe database directory (fallback to /tmp if cwd is read-only in serverless/container deployment)
-let DATA_DIR = path.join(process.cwd(), "data");
+let DATA_DIR = process.env.VERCEL ? path.join("/tmp", "krow_data") : path.join(process.cwd(), "data");
 try {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -82,28 +82,27 @@ function getGenAI(): GoogleGenAI {
   return genAIClient;
 }
 
-async function startServer() {
-  const app = express();
+const app = express();
 
-  // CORS support for all deployed origins, previews, and iframes
-  app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-    if (req.method === "OPTIONS") {
-      return res.sendStatus(200);
-    }
-    next();
-  });
+// CORS support for all deployed origins, previews, and iframes
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
-  // Middleware
-  app.use(express.json({ limit: "25mb" }));
-  app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+// Middleware
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-  // Health check
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", service: "Krow Kirana Backend", time: new Date().toISOString() });
-  });
+// Health check
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", service: "Krow Kirana Backend", time: new Date().toISOString() });
+});
 
   // Auth: Signup
   app.post(["/api/auth/signup", "/api/auth/signup/"], (req, res) => {
@@ -468,7 +467,12 @@ Extract all inventory items into the structured schema. Skip non-item expenses. 
     }
   });
 
-  // Vite middleware for development vs static production serving
+// Export app for serverless platforms like Vercel
+export default app;
+export { app };
+
+// Vite middleware for development vs static production serving (only when running standalone server)
+async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -488,7 +492,10 @@ Extract all inventory items into the structured schema. Skip non-item expenses. 
   });
 }
 
-startServer().catch((err) => {
-  console.error("Failed to start server:", err);
-  process.exit(1);
-});
+// Only launch standalone listener if not in serverless environment
+if (!process.env.VERCEL) {
+  startServer().catch((err) => {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  });
+}

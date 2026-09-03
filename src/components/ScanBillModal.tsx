@@ -182,6 +182,15 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
         }),
       });
 
+      const isJson = res.headers.get('content-type')?.includes('application/json');
+      if (!isJson) {
+        throw new Error(
+          lang === 'hi'
+            ? 'बिल स्कैनर सर्वर से संपर्क नहीं हो पाया। कृपया नमूना पर्ची देखें या फिर से प्रयास करें।'
+            : 'AI bill scanner server is offline. Please try again or load sample bill.'
+        );
+      }
+
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Failed to scan bill');
