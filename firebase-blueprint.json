@@ -1,0 +1,31 @@
+{
+  "entities": {
+    "Shop": {
+      "title": "Shop",
+      "description": "Kirana store profile, inventory, customer ledger, and sales records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "identifier": { "type": "string" },
+        "shopName": { "type": "string" },
+        "shopType": { "type": "string" },
+        "language": { "type": "string" },
+        "onboarded": { "type": "boolean" },
+        "items": { "type": "array" },
+        "customers": { "type": "array" },
+        "sales": { "type": "array" },
+        "nightCounts": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "shopName", "shopType"]
+    }
+  },
+  "firestore": {
+    "/shops/{shopId}": {
+      "schema": "Shop",
+      "description": "Each shop document is strictly accessible only by its authenticated owner"
+    }
+  }
+}
