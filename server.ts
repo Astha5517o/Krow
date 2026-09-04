@@ -348,50 +348,62 @@ app.get(["/api/health", "/health"], (_req, res) => {
       const systemInstruction = `
 You are an expert Indian retail invoice, wholesaler bill, and handwritten parchi analyzer designed for small Indian family-run kirana (general stores) and stationery/uniform shops.
 
-Your job is to read images of invoices/bills (which may be handwritten, messy, stamp-marked, carbon-copied, in Hindi, Punjabi, Hinglish, or English) and accurately extract the list of purchased inventory stock items.
+Your job is to read images of invoices, wholesale slips, and handwritten parchis (which are often handwritten in messy pen or pencil on lined paper, in Hindi, Punjabi, Hinglish, or English) and extract the list of purchased inventory stock items.
 
 CRITICAL EXTRACTION RULES:
-1. Extract ONLY actual inventory items/products that the shopkeeper purchased for resale.
-2. STRICTLY IGNORE AND SKIP non-item lines, such as:
-   - "Total", "Grand Total", "Sub Total", "Net Amount"
-   - "Discount", "Less", "Katori", "Round off"
-   - "Bardana", "Pasti", "Bags", "Kata", "Packing Charges"
+1. Extract ONLY actual inventory items/products that the shopkeeper purchased for resale in their shop.
+2. STRICTLY IGNORE AND SKIP ALL non-inventory lines. NEVER include these as items:
+   - "Total", "Grand Total", "Sub Total", "Net Amount", "Kul", "Yog", "कुल", "टोटल", "योग", "ਕੁੱਲ"
+   - "Bags", "Kata", "Katta", "Bardana", "Pasti", "Bori", "Packing Charges", "बैग", "कट्टा", "बारदाना", "बोरी", "थैला"
    - "Hamali", "Coolie", "Mazdoori", "Labour Charges"
    - "Freight", "Bhada", "Tempo", "Transport", "Cartage"
+   - "Discount", "Less", "Katori", "Round off"
    - "GST", "CGST", "SGST", "Tax"
    - "Balance Due", "Previous Balance", "Old Baaki", "Cash Paid"
-3. CAREFULLY DISTINGUISH PURCHASED QUANTITY FROM WEIGHT/SIZE IN THE ITEM NAME:
-   - "500g Garam Masala – ₹130" -> Name: "500g Garam Masala", quantity: 1, unit: "packet", totalPrice: 130
-   - "Tata Salt 1kg x 5 = 125" -> Name: "Tata Salt 1kg", quantity: 5, unit: "packet", totalPrice: 125
-   - "Fortune Oil 1L x 10 @ 140 = 1400" -> Name: "Fortune Oil 1L", quantity: 10, unit: "pouch", totalPrice: 1400
-   - "Classmate 6 No. Copy x 12 @ 40 = 480" -> Name: "Classmate 6 No. Notebook", quantity: 12, unit: "piece", totalPrice: 480
-   - "Vimal Pan Masala 2 laddi @ 190 = 380" -> Name: "Vimal Pan Masala", quantity: 2, unit: "laddi", totalPrice: 380
-   - "Aashirvaad Atta 10kg x 3 = 1260" -> Name: "Aashirvaad Atta 10kg", quantity: 3, unit: "bag", totalPrice: 1260
-4. Compute or verify:
-   - buyPrice = totalPrice / quantity (or unit rate given on bill)
-   - suggestedSellPrice = default 10% to 20% markup typical of Indian retail margin
-   - suggestedCategory based on the item and shop type:
-     * General store categories: "tobacco_cigarettes", "cold_drinks", "chips_namkeen", "biscuits_snacks", "bread_bakery", "milk_dairy", "ration", "spices", "cleaning_supplies", "cleaning_tools"
-     * Stationery categories: "stationery", "uniforms", "shoes", "first_aid", "ice_cream", "general_items"
-5. If the bill text is in Hindi/Punjabi, preserve the recognizable product name in either Latin (Hinglish/English) or native script so the shopkeeper can easily identify it.
-Return valid JSON matching this schema:
+3. CAREFULLY DISTINGUISH PURCHASE COUNT FROM WEIGHT/SIZE DESCRIPTION:
+   - Each handwritten line is roughly: <quantity/weight><item name> — <total price for that line>. There is usually NO separate "unit price" written down — it must be calculated as total ÷ quantity.
+   - Distinguish an actual purchase COUNT from a WEIGHT DESCRIPTION.
+     * "4x10kg Atta — 1280" or "4 x 10kg Atta" means 4 units of 10kg atta, total ₹1280 (buy price ₹320/unit, name: "10kg Atta").
+     * "500 Garam Masala — 130" means ONE packet that weighs 500g, costing ₹130 — NOT 500 units!
+     * Only treat a number as a purchase count when it's an explicit multiplier ("4x", "12 x", "2 x") or a bare count with no unit glued to it.
+     * A number glued or associated directly to a weight/volume unit (500g, 500, 5kg, 1L, 250g) describes the item/packet size, NOT how many were bought. For example:
+       - "500 Garam Masala — 130" -> Name: "Garam Masala 500g", quantity: 1, packetSize: "500g", unit: "packet", buyPrice: 130, totalPrice: 130
+       - "500 Haldi — 95" -> Name: "Haldi 500g", quantity: 1, packetSize: "500g", unit: "packet", buyPrice: 95, totalPrice: 95
+       - "500 Lal Mirch — 145" -> Name: "Lal Mirch 500g", quantity: 1, packetSize: "500g", unit: "packet", buyPrice: 145, totalPrice: 145
+       - "White Chana 2kg — 240" -> Name: "White Chana", quantity: 1, packetSize: "2kg", unit: "packet", buyPrice: 240, totalPrice: 240
+       - "Toor Dal Peeled 3kg — 380" -> Name: "Toor Dal Peeled", quantity: 1, packetSize: "3kg", unit: "packet", buyPrice: 380, totalPrice: 380
+       - "4 x 10kg Atta — 1280" -> Name: "10kg Atta", quantity: 4, packetSize: "10kg", unit: "bag", buyPrice: 320, totalPrice: 1280
+4. Compute:
+   - buyPrice = totalPrice / quantity (or unit rate if given)
+   - suggestedSellPrice = markup of 10% to 20% typical of Indian retail margin
+   - suggestedCategory based on the item:
+     * "ration" for atta, rice, dal, chana, sugar, oil, ghee
+     * "spices" for masala, haldi, mirch, jeera, dhaniya
+     * "biscuits_snacks" for biscuits, chips, namkeen
+     * "stationery" for notebook, copy, pen, pencil, eraser
+     * "general_items" for other general kirana goods
+5. UNCERTAINTY HANDLING FOR MESSY HANDWRITING:
+   - Handwriting may be messy, faded, or smudged.
+   - When a specific number (price, quantity) or item name is genuinely unreadable or ambiguous, set "isUncertain": true and specify "uncertainField" ("buyPrice", "quantity", or "name"). DO NOT invent or guess silently, because this affects real shopkeeper money.
+
+Return strictly valid JSON:
 {
-  "vendorName": "Wholesale vendor or distributor name",
-  "invoiceNumber": "INV-123 or parchi number if visible",
-  "invoiceDate": "YYYY-MM-DD",
-  "totalAmount": 1250,
+  "vendorName": "Wholesale vendor name or store name from header if present",
+  "invoiceNumber": "Bill/parchi number if visible, else null",
+  "invoiceDate": "YYYY-MM-DD or null",
+  "totalAmount": 2290,
   "items": [
     {
-      "name": "Item name with size",
-      "quantity": 5,
-      "unit": "packet",
-      "buyPrice": 50,
-      "totalPrice": 250,
-      "suggestedSellPrice": 60,
+      "name": "10kg Atta",
+      "quantity": 4,
+      "unit": "bag",
+      "buyPrice": 320,
+      "totalPrice": 1280,
+      "suggestedSellPrice": 350,
       "suggestedCategory": "ration",
-      "packetSize": "1kg",
-      "spoilQuickly": false,
-      "exchangeableOnSpoil": false
+      "packetSize": "10kg",
+      "isUncertain": false,
+      "uncertainField": null
     }
   ]
 }
@@ -401,7 +413,7 @@ Return valid JSON matching this schema:
 Analyze this purchase bill / wholesale parchi photo.
 Shop type: ${shopType}.
 Language preference: ${language}.
-Extract all inventory items into clean JSON format. Skip non-inventory charges.
+Extract all inventory items into clean JSON format according to the rules. Strictly skip non-item lines like Total and Bags.
 `;
 
       const imagePart = {
@@ -411,8 +423,14 @@ Extract all inventory items into clean JSON format. Skip non-inventory charges.
         },
       };
 
-      // Fast, resilient candidate models (tested for low latency and high availability)
-      const candidateModels = ["gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-3.8-flash"];
+      // Fast, high-availability multimodal models with graceful fallback across versions
+      const candidateModels = [
+        "gemini-3.1-flash-lite",
+        "gemini-flash-lite-latest",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-latest",
+        "gemini-3.7-flash",
+      ];
       let lastError: any = null;
       let parsedData: any = null;
 
@@ -443,7 +461,7 @@ Extract all inventory items into clean JSON format. Skip non-inventory charges.
             }
           }
 
-          if (parsedData && Array.isArray(parsedData.items)) {
+          if (parsedData && Array.isArray(parsedData.items) && parsedData.items.length > 0) {
             break; // Successfully got items!
           }
         } catch (mErr: any) {
@@ -452,30 +470,23 @@ Extract all inventory items into clean JSON format. Skip non-inventory charges.
         }
       }
 
-      // Safe fallback if API rate limits or network issues occur so shopkeeper is never blocked
-      if (!parsedData || !Array.isArray(parsedData.items)) {
-        console.warn("AI models could not parse, using resilient fallback template:", lastError?.message);
-        const fallbackItems = shopType === "stationery"
-          ? [
-              { name: "Classmate Notebook 120p", quantity: 24, unit: "piece", buyPrice: 32, totalPrice: 768, suggestedSellPrice: 40, suggestedCategory: "stationery" },
-              { name: "Apsara Platinum Pencils Pack", quantity: 10, unit: "box", buyPrice: 65, totalPrice: 650, suggestedSellPrice: 80, suggestedCategory: "stationery" },
-              { name: "Doms Ball Pen Blue (Pack of 20)", quantity: 5, unit: "packet", buyPrice: 90, totalPrice: 450, suggestedSellPrice: 110, suggestedCategory: "stationery" },
-            ]
-          : [
-              { name: "Fortune Chakki Fresh Atta 10kg", quantity: 5, unit: "bag", buyPrice: 380, totalPrice: 1900, suggestedSellPrice: 420, suggestedCategory: "ration" },
-              { name: "Saffola Gold Pro Healthy 1L", quantity: 12, unit: "packet", buyPrice: 155, totalPrice: 1860, suggestedSellPrice: 180, suggestedCategory: "ration" },
-              { name: "Tata Salt 1kg", quantity: 30, unit: "packet", buyPrice: 22, totalPrice: 660, suggestedSellPrice: 26, suggestedCategory: "ration" },
-              { name: "Parle-G Gold Biscuits 100g", quantity: 48, unit: "packet", buyPrice: 9, totalPrice: 432, suggestedSellPrice: 10, suggestedCategory: "biscuits_snacks" },
-            ];
+      // Check if valid items were extracted - NEVER return fake placeholder data
+      if (!parsedData || !Array.isArray(parsedData.items) || parsedData.items.length === 0) {
+        let cleanErrorMessage = "Could not extract items from the bill photo. Please ensure the handwriting and numbers are clearly visible, then try again.";
+        const rawErrMsg = lastError?.message || "";
+        if (rawErrMsg.includes("503") || rawErrMsg.includes("high demand") || rawErrMsg.includes("UNAVAILABLE")) {
+          cleanErrorMessage = "AI vision service is experiencing brief high demand. Please try again in a moment.";
+        } else if (rawErrMsg.includes("429") || rawErrMsg.includes("quota")) {
+          cleanErrorMessage = "AI request limit reached. Please wait a moment and try again.";
+        } else if (rawErrMsg.includes("API key")) {
+          cleanErrorMessage = "Gemini API key is not configured. Please check server settings.";
+        }
 
-        parsedData = {
-          vendorName: "Wholesale Agency",
-          invoiceNumber: "BILL-" + Math.floor(1000 + Math.random() * 9000),
-          invoiceDate: new Date().toISOString().split("T")[0],
-          totalAmount: fallbackItems.reduce((acc, it) => acc + it.totalPrice, 0),
-          items: fallbackItems,
-          isFallback: true,
-        };
+        console.warn("AI models could not extract items:", cleanErrorMessage);
+        return res.status(422).json({
+          success: false,
+          error: cleanErrorMessage,
+        });
       }
 
       return res.json({
@@ -485,6 +496,7 @@ Extract all inventory items into clean JSON format. Skip non-inventory charges.
     } catch (err: any) {
       console.error("Scan bill error:", err);
       return res.status(500).json({
+        success: false,
         error: err?.message || "Failed to scan bill. Please ensure the photo is clear and try again.",
       });
     }

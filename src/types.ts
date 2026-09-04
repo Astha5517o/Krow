@@ -100,6 +100,8 @@ export interface ScannedBillDraftItem {
   exchangeableOnSpoil: boolean;
   packetSize?: number;
   matchedItemId?: string; // If matched with existing stock item
+  isUncertain?: boolean;
+  uncertainField?: string;
 }
 
 export interface ReorderSuggestion {

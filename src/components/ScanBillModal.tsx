@@ -7,6 +7,7 @@ import {
   X,
   Check,
   AlertCircle,
+  AlertTriangle,
   Edit2,
   Trash2,
   Plus,
@@ -42,6 +43,7 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasScanned, setHasScanned] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSampleBill, setIsSampleBill] = useState(false);
 
   // Client-side image compression: downscales giant phone camera photos to max 1600px
   // Keeps file size around 200-400KB, preventing network drops and Vercel 4.5MB payload limits
@@ -233,30 +235,34 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
             },
           ];
 
-    setVendorName('Shree Ganesh Wholesale Agency');
+    setVendorName(shopType === 'stationery' ? 'Vidya Stationery Wholesalers' : 'Shree Ganesh Wholesale Agency');
     setInvoiceDate(new Date().toISOString().split('T')[0]);
     setDraftItems(sampleDrafts);
     setHasScanned(true);
+    setIsSampleBill(true);
+    setErrorMessage(null);
     showToast(
       lang === 'hi'
-        ? 'जांच के लिए नमूना थोक पर्ची लोड की गई।'
+        ? 'जांच के लिए नमूना थोक पर्ची लोड की गई (यह असली पर्ची नहीं है)।'
         : lang === 'pa'
         ? 'ਜਾਂਚ ਲਈ ਨਮੂਨਾ ਬਿੱਲ ਲੋਡ ਕੀਤਾ ਗਿਆ।'
-        : 'Loaded sample purchase bill for instant review.'
+        : 'Loaded sample purchase bill for instant review (DEMO).'
     );
   };
 
   const processBillImage = async (base64Data: string) => {
     setIsAnalyzing(true);
     setErrorMessage(null);
+    setIsSampleBill(false);
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 28000);
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
 
       const res = await fetch('/api/scan-bill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         signal: controller.signal,
         body: JSON.stringify({
           imageBase64: base64Data,
@@ -274,20 +280,29 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
         data = await res.json();
       }
 
-      if (!res.ok && !data?.data) {
-        throw new Error(
-          data?.error ||
-          (lang === 'hi'
-            ? 'बिल स्कैनर सर्वर व्यस्त है। कृपया दोबारा प्रयास करें।'
-            : 'AI bill scanner server is busy. Please try again.')
+      if (!res.ok || data?.success === false) {
+        const errorMsg = data?.error || (
+          lang === 'hi'
+            ? 'पर्ची से सामान नहीं पढ़ा जा सका। कृपया साफ़ रोशनी में दोबारा फ़ोटो लें।'
+            : 'Could not read items from this bill photo. Please take a clearer, well-lit photo.'
         );
+        throw new Error(errorMsg);
       }
 
       const billData = data?.data || data || {};
-      setVendorName(billData.vendorName || (shopType === 'stationery' ? 'Vidya Stationery Wholesalers' : 'Kisan Wholesale Agency'));
+      const rawItems = Array.isArray(billData.items) ? billData.items : [];
+
+      if (rawItems.length === 0) {
+        throw new Error(
+          lang === 'hi'
+            ? 'पर्ची से कोई सामान नहीं मिला। कृपया साफ़ लिखावट वाली फ़ोटो लें।'
+            : 'No valid inventory items found in this bill photo. Please try with a clearer photo.'
+        );
+      }
+
+      setVendorName(billData.vendorName || '');
       setInvoiceDate(billData.invoiceDate || new Date().toISOString().split('T')[0]);
 
-      const rawItems = Array.isArray(billData.items) ? billData.items : Array.isArray(data?.items) ? data.items : [];
       const items: ScannedBillDraftItem[] = rawItems.map((it: any, idx: number) => {
         // Look for match in existing items
         const match = existingItems.find(
@@ -298,7 +313,7 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
           id: 'draft_' + idx + '_' + Date.now(),
           name: it.name || 'Unknown Item',
           quantity: Number(it.quantity) || 1,
-          unit: it.unit || 'piece',
+          unit: it.unit || 'packet',
           buyPrice: Number(it.buyPrice) || 0,
           totalPrice: Number(it.totalPrice) || (Number(it.quantity) || 1) * (Number(it.buyPrice) || 0),
           suggestedSellPrice: Number(it.suggestedSellPrice) || (it.buyPrice ? Math.round(Number(it.buyPrice) * 1.15) : 0),
@@ -307,60 +322,23 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
           spoilQuickly: Boolean(it.spoilQuickly),
           exchangeableOnSpoil: Boolean(it.exchangeableOnSpoil),
           matchedItemId: match ? match.id : undefined,
+          isUncertain: Boolean(it.isUncertain),
+          uncertainField: it.uncertainField || undefined,
         };
       });
 
       setDraftItems(items);
       setHasScanned(true);
-
-      if (billData.isFallback) {
-        setErrorMessage(
-          lang === 'hi'
-            ? 'एआई विज़न सर्वर पर अधिक लोड के कारण प्रारंभिक पर्ची ड्राफ्ट तैयार किया गया है। कृपया आइटम और दाम की पुष्टि करें।'
-            : 'AI vision server had high traffic; loaded an editable draft template so you can verify and save without delay.'
-        );
-      } else if (items.length === 0) {
-        setErrorMessage(t.noItemsExtracted);
-      }
     } catch (err: any) {
-      console.warn('Scan bill network/server warning:', err);
-      // Auto-recover with editable template matching shop type rather than completely blocking the shopkeeper
-      const fallbackItems = shopType === 'stationery'
-        ? [
-            { name: 'Classmate Notebook 120p', quantity: 24, unit: 'piece', buyPrice: 32, totalPrice: 768, suggestedSellPrice: 40, suggestedCategory: 'stationery' },
-            { name: 'Apsara Platinum Pencils Pack', quantity: 10, unit: 'box', buyPrice: 65, totalPrice: 650, suggestedSellPrice: 80, suggestedCategory: 'stationery' },
-            { name: 'Doms Ball Pen Blue (Pack of 20)', quantity: 5, unit: 'packet', buyPrice: 90, totalPrice: 450, suggestedSellPrice: 110, suggestedCategory: 'stationery' },
-          ]
-        : [
-            { name: 'Fortune Chakki Fresh Atta 10kg', quantity: 5, unit: 'bag', buyPrice: 380, totalPrice: 1900, suggestedSellPrice: 420, suggestedCategory: 'ration' },
-            { name: 'Saffola Gold Pro Healthy 1L', quantity: 12, unit: 'packet', buyPrice: 155, totalPrice: 1860, suggestedSellPrice: 180, suggestedCategory: 'ration' },
-            { name: 'Tata Salt 1kg', quantity: 30, unit: 'packet', buyPrice: 22, totalPrice: 660, suggestedSellPrice: 26, suggestedCategory: 'ration' },
-            { name: 'Parle-G Gold Biscuits 100g', quantity: 48, unit: 'packet', buyPrice: 9, totalPrice: 432, suggestedSellPrice: 10, suggestedCategory: 'biscuits_snacks' },
-          ];
-
-      setVendorName(shopType === 'stationery' ? 'Vidya Stationery Traders' : 'Shree Ganesh Wholesale Agency');
-      setInvoiceDate(new Date().toISOString().split('T')[0]);
-
-      const items: ScannedBillDraftItem[] = fallbackItems.map((it, idx) => ({
-        id: 'draft_' + idx + '_' + Date.now(),
-        name: it.name,
-        quantity: it.quantity,
-        unit: it.unit,
-        buyPrice: it.buyPrice,
-        totalPrice: it.totalPrice,
-        suggestedSellPrice: it.suggestedSellPrice,
-        suggestedCategory: it.suggestedCategory,
-        spoilQuickly: false,
-        exchangeableOnSpoil: false,
-      }));
-
-      setDraftItems(items);
-      setHasScanned(true);
-
+      console.error('Scan bill error:', err);
+      // STRICT DIRECTIVE: NEVER substitute sample/placeholder data automatically on failure.
+      // Reset draft items to empty, do not show scanned screen, show clean error state with "Try Again".
+      setDraftItems([]);
+      setHasScanned(false);
       setErrorMessage(
-        lang === 'hi'
-          ? 'सर्वर से संपर्क धीमा होने के कारण हमने पर्ची का ड्राफ्ट खोल दिया है। कृपया दाम और मात्रा देखकर स्टॉक में जोड़ें।'
-          : 'Server connection was delayed; opened an editable stock draft so you can verify quantities and save directly.'
+        err?.name === 'AbortError'
+          ? (lang === 'hi' ? 'सर्वर से संपर्क धीमा होने के कारण समय समाप्त हो गया। कृपया दोबारा कोशिश करें।' : 'Server request timed out. Please check your connection and try again.')
+          : (err?.message || (lang === 'hi' ? 'स्कैन पूरा नहीं हो सका। कृपया दोबारा कोशिश करें।' : 'Scan could not be completed. Please try again.'))
       );
     } finally {
       setIsAnalyzing(false);
@@ -560,31 +538,54 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
             </div>
           )}
 
-          {/* Error notice with instant recovery actions */}
+          {/* Error notice with instant recovery actions - NO fake fallback data */}
           {errorMessage && (
-            <div className="p-3.5 rounded-xl bg-[#FDF2F2] border border-[#F8B4B4] text-[#9B1C1C] text-xs space-y-2">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span className="font-medium leading-relaxed">{errorMessage}</span>
+            <div className="p-4 rounded-xl bg-[#FDF2F2] border border-[#F8B4B4] text-[#9B1C1C] text-xs space-y-3">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-[#E02424]" />
+                <div className="flex-1">
+                  <h5 className="font-bold text-xs text-[#9B1C1C]">
+                    {lang === 'hi' ? 'पर्ची स्कैन नहीं हो सकी' : lang === 'pa' ? 'ਪਰਚਾ ਸਕੈਨ ਨਹੀਂ ਹੋ ਸਕਿਆ' : 'Bill Scanning Failed'}
+                  </h5>
+                  <p className="font-medium text-[11px] text-[#726C60] mt-0.5 leading-relaxed">
+                    {errorMessage}
+                  </p>
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#F8B4B4]/40">
                 <button
                   type="button"
-                  onClick={handleLoadDemoBill}
-                  className="px-2.5 py-1 rounded-md bg-[#1E4632] text-white font-bold text-[11px] hover:bg-[#153424] transition cursor-pointer"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    setImagePreview(null);
+                    cameraInputRef.current?.click();
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-[#1E4632] hover:bg-[#153424] text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
                 >
-                  {lang === 'hi' ? '📄 नमूना पर्ची लोड करें' : lang === 'pa' ? '📄 ਨਮੂਨਾ ਬਿੱਲ ਲੋਡ ਕਰੋ' : '📄 Load Sample Bill'}
+                  <Camera className="w-3.5 h-3.5 text-[#D9A62E]" />
+                  <span>{lang === 'hi' ? 'दोबारा फ़ोटो लें' : lang === 'pa' ? 'ਦੁਬਾਰਾ ਫ਼ੋਟੋ ਲਓ' : 'Try Again / Retake Photo'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setErrorMessage(null);
                     setImagePreview(null);
-                    setHasScanned(false);
+                    galleryInputRef.current?.click();
                   }}
-                  className="px-2.5 py-1 rounded-md bg-white border border-[#F8B4B4] text-[#9B1C1C] font-semibold text-[11px] hover:bg-[#FDF2F2] transition cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg bg-white border border-[#E4DFD2] hover:bg-[#FAF7F0] text-[#1E4632] font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
                 >
-                  {lang === 'hi' ? 'दोबारा कोशिश करें' : 'Try Again'}
+                  <ImageIcon className="w-3.5 h-3.5 text-[#2F6B4F]" />
+                  <span>{lang === 'hi' ? 'गैलरी से चुनें' : 'Choose from Gallery'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    setImagePreview(null);
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg text-[#726C60] hover:text-[#262421] text-xs font-medium cursor-pointer ml-auto"
+                >
+                  {lang === 'hi' ? 'खारिज करें' : 'Dismiss'}
                 </button>
               </div>
             </div>
@@ -593,6 +594,30 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
           {/* Editable Draft Review Screen */}
           {hasScanned && !isAnalyzing && (
             <div className="space-y-4">
+              {/* UNMISTAKABLE DEMO SAMPLE BANNER (Only when explicitly loaded via demo button) */}
+              {isSampleBill && (
+                <div className="p-3.5 bg-amber-50 border-2 border-amber-500 rounded-xl flex items-start gap-2.5 text-amber-950 shadow-xs">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-amber-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        {lang === 'hi' ? 'डेमो नमूना' : 'DEMO'}
+                      </span>
+                      <h5 className="font-extrabold text-xs text-amber-950 tracking-wide uppercase">
+                        {lang === 'hi' ? '⚠️ नमूना पर्ची — यह आपकी असली पर्ची नहीं है' : lang === 'pa' ? '⚠️ ਨਮੂਨਾ ਬਿੱਲ — ਇਹ ਤੁਹਾਡਾ ਅਸਲੀ ਬਿੱਲ ਨਹੀਂ ਹੈ' : '⚠️ SAMPLE — NOT YOUR REAL BILL'}
+                      </h5>
+                    </div>
+                    <p className="text-[11px] text-amber-900 font-medium mt-1 leading-relaxed">
+                      {lang === 'hi'
+                        ? 'यह केवल ऐप की कार्यप्रणाली देखने के लिए एक परीक्षण नमूना है। यह आपके द्वारा खींची गई असली पर्ची का डेटा नहीं है।'
+                        : lang === 'pa'
+                        ? 'ਇਹ ਸਿਰਫ ਡੈਮੋ ਵੇਖਣ ਲਈ ਨਮੂਨਾ ਹੈ। ਇਹ ਤੁਹਾਡੇ ਕੈਮਰੇ ਵਾਲਾ ਅਸਲੀ ਬਿੱਲ ਨਹੀਂ ਹੈ।'
+                        : 'This is pre-filled sample data for demonstration. None of these items came from your photographed bill.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Wholesaler & Date Meta */}
               <div className="p-3 bg-[#FAF7F0] rounded-xl border border-[#E4DFD2] grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <div>
@@ -643,7 +668,11 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
                   return (
                     <div
                       key={draft.id}
-                      className="p-3 rounded-xl border border-[#E4DFD2] bg-white shadow-2xs space-y-2 relative"
+                      className={`p-3 rounded-xl border bg-white shadow-2xs space-y-2 relative ${
+                        draft.isUncertain
+                          ? 'border-amber-400 bg-amber-50/20'
+                          : 'border-[#E4DFD2]'
+                      }`}
                     >
                       <button
                         onClick={() => handleRemoveDraft(draft.id)}
@@ -653,19 +682,29 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Row 1: Name & Matched Status */}
-                      <div className="pr-7">
-                        <label className="block text-[10px] font-bold text-[#726C60]">
-                          {lang === 'hi' ? 'सामान का नाम' : lang === 'pa' ? 'ਸਮਾਨ ਦਾ ਨਾਮ' : 'Product Name'}
-                        </label>
+                      {/* Row 1: Name & Matched Status & Uncertainty Warning */}
+                      <div className="pr-7 space-y-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <label className="block text-[10px] font-bold text-[#726C60]">
+                            {lang === 'hi' ? 'सामान का नाम' : lang === 'pa' ? 'ਸਮਾਨ ਦਾ ਨਾਮ' : 'Product Name'}
+                          </label>
+                          {draft.isUncertain && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[10px] font-bold border border-amber-300">
+                              <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                              {lang === 'hi' ? 'लिखावट / दाम जांचें' : 'Check handwriting / price'}
+                            </span>
+                          )}
+                        </div>
                         <input
                           type="text"
                           value={draft.name}
                           onChange={(e) => handleUpdateDraft(draft.id, { name: e.target.value })}
-                          className="w-full font-bold text-xs sm:text-sm text-[#262421] border-b border-[#E4DFD2] focus:border-[#1E4632] focus:outline-hidden py-0.5"
+                          className={`w-full font-bold text-xs sm:text-sm text-[#262421] border-b focus:border-[#1E4632] focus:outline-hidden py-0.5 ${
+                            draft.uncertainField === 'name' ? 'border-amber-400 bg-amber-50/40' : 'border-[#E4DFD2]'
+                          }`}
                         />
                         {draft.matchedItemId && (
-                          <span className="text-[9px] text-[#2F6B4F] font-bold">
+                          <span className="text-[9px] text-[#2F6B4F] font-bold block">
                             ✓ {lang === 'hi' ? 'दुकान के मौजूदा स्टॉक से मेल खाता है (स्टॉक बढ़ेगा)' : lang === 'pa' ? 'ਮੌਜੂਦਾ ਸਟਾਕ ਨਾਲ ਮੇਲ ਖਾਂਦਾ ਹੈ' : 'Matches existing stock (will restock)'}
                           </span>
                         )}
@@ -685,7 +724,9 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
                             onChange={(e) =>
                               handleUpdateDraft(draft.id, { quantity: parseFloat(e.target.value) || 0 })
                             }
-                            className="w-full px-2 py-1 rounded-lg border border-[#E4DFD2] font-semibold text-[#262421]"
+                            className={`w-full px-2 py-1 rounded-lg border font-semibold text-[#262421] ${
+                              draft.uncertainField === 'quantity' ? 'border-amber-400 bg-amber-50/40 ring-1 ring-amber-300' : 'border-[#E4DFD2]'
+                            }`}
                           />
                         </div>
 
@@ -713,7 +754,11 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
                             onChange={(e) =>
                               handleUpdateDraft(draft.id, { buyPrice: parseFloat(e.target.value) || 0 })
                             }
-                            className="w-full px-2 py-1 rounded-lg border border-[#E4DFD2] font-semibold text-[#262421]"
+                            className={`w-full px-2 py-1 rounded-lg border font-semibold text-[#262421] ${
+                              draft.isUncertain || draft.uncertainField === 'buyPrice'
+                                ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-300'
+                                : 'border-[#E4DFD2]'
+                            }`}
                           />
                         </div>
 
@@ -804,6 +849,7 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
                 setHasScanned(false);
                 setDraftItems([]);
                 setImagePreview(null);
+                setIsSampleBill(false);
               } else {
                 onClose();
               }
@@ -816,10 +862,18 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({ isOpen, onClose })
           {hasScanned && (
             <button
               onClick={handleConfirmAddToStock}
-              className="px-5 py-2.5 rounded-xl bg-[#1E4632] text-white text-xs sm:text-sm font-bold hover:bg-[#2F6B4F] transition flex items-center gap-1.5 shadow-md cursor-pointer"
+              className={`px-5 py-2.5 rounded-xl text-white text-xs sm:text-sm font-bold transition flex items-center gap-1.5 shadow-md cursor-pointer ${
+                isSampleBill
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-[#1E4632] hover:bg-[#2F6B4F]'
+              }`}
             >
               <Check className="w-4 h-4" />
-              <span>{t.confirmAndAddToStock}</span>
+              <span>
+                {isSampleBill
+                  ? (lang === 'hi' ? 'नमूना स्टॉक जोड़ें (डेमो)' : 'Save Sample Demo')
+                  : t.confirmAndAddToStock}
+              </span>
             </button>
           )}
         </div>

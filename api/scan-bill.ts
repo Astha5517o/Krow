@@ -48,34 +48,79 @@ export default async function handler(req: any, res: any) {
 
     const systemInstruction = `
 You are an expert Indian retail invoice, wholesaler bill, and handwritten parchi analyzer designed for small Indian family-run kirana (general stores) and stationery/uniform shops.
-Extract only valid purchased inventory items. Skip taxes, discounts, transport, labour, old balances, and grand totals.
-Return JSON format:
+
+Your job is to read images of invoices, wholesale slips, and handwritten parchis (which are often handwritten in messy pen or pencil on lined paper, in Hindi, Punjabi, Hinglish, or English) and extract the list of purchased inventory stock items.
+
+CRITICAL EXTRACTION RULES:
+1. Extract ONLY actual inventory items/products that the shopkeeper purchased for resale in their shop.
+2. STRICTLY IGNORE AND SKIP ALL non-inventory lines. NEVER include these as items:
+   - "Total", "Grand Total", "Sub Total", "Net Amount", "Kul", "Yog", "कुल", "टोटल", "योग", "ਕੁੱਲ"
+   - "Bags", "Kata", "Katta", "Bardana", "Pasti", "Bori", "Packing Charges", "बैग", "कट्टा", "बारदाना", "बोरी", "थैला"
+   - "Hamali", "Coolie", "Mazdoori", "Labour Charges"
+   - "Freight", "Bhada", "Tempo", "Transport", "Cartage"
+   - "Discount", "Less", "Katori", "Round off"
+   - "GST", "CGST", "SGST", "Tax"
+   - "Balance Due", "Previous Balance", "Old Baaki", "Cash Paid"
+3. CAREFULLY DISTINGUISH PURCHASE COUNT FROM WEIGHT/SIZE DESCRIPTION:
+   - Each handwritten line is roughly: <quantity/weight><item name> — <total price for that line>. There is usually NO separate "unit price" written down — it must be calculated as total ÷ quantity.
+   - Distinguish an actual purchase COUNT from a WEIGHT DESCRIPTION.
+     * "4x10kg Atta — 1280" or "4 x 10kg Atta" means 4 units of 10kg atta, total ₹1280 (buy price ₹320/unit, name: "10kg Atta").
+     * "500 Garam Masala — 130" means ONE packet that weighs 500g, costing ₹130 — NOT 500 units!
+     * Only treat a number as a purchase count when it's an explicit multiplier ("4x", "12 x", "2 x") or a bare count with no unit glued to it.
+     * A number glued or associated directly to a weight/volume unit (500g, 500, 5kg, 1L, 250g) describes the item/packet size, NOT how many were bought. For example:
+       - "500 Garam Masala — 130" -> Name: "Garam Masala 500g", quantity: 1, packetSize: "500g", unit: "packet", buyPrice: 130, totalPrice: 130
+       - "500 Haldi — 95" -> Name: "Haldi 500g", quantity: 1, packetSize: "500g", unit: "packet", buyPrice: 95, totalPrice: 95
+       - "500 Lal Mirch — 145" -> Name: "Lal Mirch 500g", quantity: 1, packetSize: "500g", unit: "packet", buyPrice: 145, totalPrice: 145
+       - "White Chana 2kg — 240" -> Name: "White Chana", quantity: 1, packetSize: "2kg", unit: "packet", buyPrice: 240, totalPrice: 240
+       - "Toor Dal Peeled 3kg — 380" -> Name: "Toor Dal Peeled", quantity: 1, packetSize: "3kg", unit: "packet", buyPrice: 380, totalPrice: 380
+       - "4 x 10kg Atta — 1280" -> Name: "10kg Atta", quantity: 4, packetSize: "10kg", unit: "bag", buyPrice: 320, totalPrice: 1280
+4. Compute:
+   - buyPrice = totalPrice / quantity (or unit rate if given)
+   - suggestedSellPrice = markup of 10% to 20% typical of Indian retail margin
+   - suggestedCategory based on the item:
+     * "ration" for atta, rice, dal, chana, sugar, oil, ghee
+     * "spices" for masala, haldi, mirch, jeera, dhaniya
+     * "biscuits_snacks" for biscuits, chips, namkeen
+     * "stationery" for notebook, copy, pen, pencil, eraser
+     * "general_items" for other general kirana goods
+5. UNCERTAINTY HANDLING FOR MESSY HANDWRITING:
+   - Handwriting may be messy, faded, or smudged.
+   - When a specific number (price, quantity) or item name is genuinely unreadable or ambiguous, set "isUncertain": true and specify "uncertainField" ("buyPrice", "quantity", or "name"). DO NOT invent or guess silently, because this affects real shopkeeper money.
+
+Return strictly valid JSON:
 {
-  "vendorName": "Wholesale Agency",
-  "invoiceNumber": "INV-123",
-  "invoiceDate": "YYYY-MM-DD",
-  "totalAmount": 1250,
+  "vendorName": "Wholesale vendor name or store name from header if present",
+  "invoiceNumber": "Bill/parchi number if visible, else null",
+  "invoiceDate": "YYYY-MM-DD or null",
+  "totalAmount": 2290,
   "items": [
     {
-      "name": "Item name with size",
-      "quantity": 5,
-      "unit": "packet",
-      "buyPrice": 50,
-      "totalPrice": 250,
-      "suggestedSellPrice": 60,
+      "name": "10kg Atta",
+      "quantity": 4,
+      "unit": "bag",
+      "buyPrice": 320,
+      "totalPrice": 1280,
+      "suggestedSellPrice": 350,
       "suggestedCategory": "ration",
-      "packetSize": "1kg",
-      "spoilQuickly": false,
-      "exchangeableOnSpoil": false
+      "packetSize": "10kg",
+      "isUncertain": false,
+      "uncertainField": null
     }
   ]
 }
 `;
 
-    const promptText = `Analyze this purchase bill / wholesale parchi photo for shop type: ${shopType}, language: ${language}. Return JSON.`;
+    const promptText = `Analyze this purchase bill / wholesale parchi photo for shop type: ${shopType}, language: ${language}. Strictly skip non-item lines like Total and Bags. Return JSON.`;
 
-    const candidateModels = ["gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-3.8-flash"];
+    const candidateModels = [
+      "gemini-3.1-flash-lite",
+      "gemini-flash-lite-latest",
+      "gemini-3.5-flash-lite",
+      "gemini-flash-latest",
+      "gemini-3.7-flash",
+    ];
     let parsedData: any = null;
+    let lastError: any = null;
 
     for (const modelName of candidateModels) {
       try {
@@ -105,39 +150,35 @@ Return JSON format:
           if (m) parsedData = JSON.parse(m[0]);
         }
 
-        if (parsedData && Array.isArray(parsedData.items)) {
+        if (parsedData && Array.isArray(parsedData.items) && parsedData.items.length > 0) {
           break;
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn(`Vercel model ${modelName} attempt failed:`, err);
+        lastError = err;
       }
     }
 
-    if (!parsedData || !Array.isArray(parsedData.items)) {
-      const fallbackItems = shopType === "stationery"
-        ? [
-            { name: "Classmate Notebook 120p", quantity: 24, unit: "piece", buyPrice: 32, totalPrice: 768, suggestedSellPrice: 40, suggestedCategory: "stationery" },
-            { name: "Apsara Platinum Pencils Pack", quantity: 10, unit: "box", buyPrice: 65, totalPrice: 650, suggestedSellPrice: 80, suggestedCategory: "stationery" },
-          ]
-        : [
-            { name: "Fortune Chakki Fresh Atta 10kg", quantity: 5, unit: "bag", buyPrice: 380, totalPrice: 1900, suggestedSellPrice: 420, suggestedCategory: "ration" },
-            { name: "Saffola Gold Pro Healthy 1L", quantity: 12, unit: "packet", buyPrice: 155, totalPrice: 1860, suggestedSellPrice: 180, suggestedCategory: "ration" },
-            { name: "Tata Salt 1kg", quantity: 30, unit: "packet", buyPrice: 22, totalPrice: 660, suggestedSellPrice: 26, suggestedCategory: "ration" },
-          ];
+    if (!parsedData || !Array.isArray(parsedData.items) || parsedData.items.length === 0) {
+      let cleanErrorMessage = "Could not extract items from the bill photo. Please ensure the handwriting and numbers are clearly visible, then try again.";
+      const rawErrMsg = lastError?.message || "";
+      if (rawErrMsg.includes("503") || rawErrMsg.includes("high demand") || rawErrMsg.includes("UNAVAILABLE")) {
+        cleanErrorMessage = "AI vision service is experiencing brief high demand. Please try again in a moment.";
+      } else if (rawErrMsg.includes("429") || rawErrMsg.includes("quota")) {
+        cleanErrorMessage = "AI request limit reached. Please wait a moment and try again.";
+      } else if (rawErrMsg.includes("API key")) {
+        cleanErrorMessage = "Gemini API key is not configured. Please check server settings.";
+      }
 
-      parsedData = {
-        vendorName: "Wholesale Agency",
-        invoiceNumber: "BILL-" + Math.floor(1000 + Math.random() * 9000),
-        invoiceDate: new Date().toISOString().split("T")[0],
-        totalAmount: fallbackItems.reduce((acc, it) => acc + it.totalPrice, 0),
-        items: fallbackItems,
-        isFallback: true,
-      };
+      return res.status(422).json({
+        success: false,
+        error: cleanErrorMessage,
+      });
     }
 
     return res.status(200).json({ success: true, data: parsedData });
   } catch (error: any) {
     console.error("Vercel scan-bill error:", error);
-    return res.status(500).json({ error: error?.message || "Failed to scan bill." });
+    return res.status(500).json({ success: false, error: error?.message || "Failed to scan bill." });
   }
 }
