@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="hi" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Krow — Know More, Grow More</title>
+    <meta name="description" content="Smart inventory, udhaar khata ledger, and profit manager for retail shopkeepers. Know More, Grow More." />
+    <meta property="og:title" content="Krow — Know More, Grow More" />
+    <meta property="og:description" content="Smart inventory, udhaar khata ledger, and profit manager for retail shopkeepers. Know More, Grow More." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="copyright" content="© 2026 Krow Technologies Inc. All rights reserved." />
+    <meta name="author" content="Krow Technologies" />
+
+    <!-- Professional Brand Favicon (Identifiable in browser tab like Claude & YouTube) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='13.5' y1='16' x2='23' y2='7' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0%25' stop-color='%23D97706'/%3E%3Cstop offset='45%25' stop-color='%23F59E0B'/%3E%3Cstop offset='100%25' stop-color='%23FEF08A'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='%23082617'/%3E%3Cline x1='7.5' y1='7.4' x2='7.5' y2='24.6' stroke='%23FFFFFF' stroke-width='4.8' stroke-linecap='round'/%3E%3Cline x1='13.8' y1='16' x2='22.8' y2='7.0' stroke='url(%23g)' stroke-width='4.8' stroke-linecap='round'/%3E%3Cline x1='13.8' y1='16' x2='22.8' y2='25.0' stroke='%23FFFFFF' stroke-width='4.8' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Progressive Web App (PWA) Standards -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0E3522" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Krow" />
+    <meta name="application-name" content="Krow" />
+
+    <!-- Google Fonts: Indic & Display with Zero-Shift Loading -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" as="style" />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;700;800&family=Karla:ital,wght@0,400;0,500;0,700;1,400&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Sans+Gurmukhi:wght@400;500;600;700&family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" rel="stylesheet" />
+
+    <!-- Environment & Font Loading Guards -->
+    <script>
+      (function() {
+        // Suppress benign Vite WebSocket & HMR connection messages in sandboxed containers where DISABLE_HMR is set
+        function isBenignViteMessage(args) {
+          if (!args || args.length === 0) return false;
+          for (var i = 0; i < args.length; i++) {
+            var arg = args[i];
+            if (!arg) continue;
+            if (typeof arg === 'string') {
+              var lower = arg.toLowerCase();
+              if (
+                lower.indexOf('[vite]') !== -1 ||
+                lower.indexOf('vite') === 0 ||
+                lower.indexOf('failed to connect to websocket') !== -1 ||
+                lower.indexOf('server connection lost') !== -1 ||
+                lower.indexOf('websocket connection') !== -1 ||
+                lower.indexOf('/@vite/client') !== -1
+              ) {
+                return true;
+              }
+            } else if (typeof arg === 'object') {
+              var msg = (arg.message || '') + ' ' + (arg.stack || '') + ' ' + (arg.reason || '');
+              var lowerMsg = msg.toLowerCase();
+              if (
+                lowerMsg.indexOf('[vite]') !== -1 ||
+                lowerMsg.indexOf('failed to connect to websocket') !== -1 ||
+                lowerMsg.indexOf('websocket') !== -1
+              ) {
+                return true;
+              }
+            }
+          }
+          return false;
+        }
+
+        ['error', 'warn', 'log', 'info', 'debug'].forEach(function(method) {
+          var orig = console[method];
+          if (!orig) return;
+          console[method] = function() {
+            if (isBenignViteMessage(arguments)) {
+              return;
+            }
+            return orig.apply(console, arguments);
+          };
+        });
+
+        window.addEventListener('error', function(e) {
+          var msg = (e && (e.message || '')) + '';
+          var src = (e && (e.filename || '')) + '';
+          if (
+            msg.toLowerCase().indexOf('[vite]') !== -1 ||
+            msg.toLowerCase().indexOf('websocket') !== -1 ||
+            src.indexOf('@vite/client') !== -1
+          ) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          var reason = (e && (e.reason && (e.reason.message || e.reason))) + '';
+          if (
+            reason.toLowerCase().indexOf('[vite]') !== -1 ||
+            reason.toLowerCase().indexOf('websocket') !== -1
+          ) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          }
+        }, true);
+
+        if ('fonts' in document) {
+          Promise.race([
+            document.fonts.load('24px "Material Symbols Outlined"'),
+            new Promise(function(resolve) { setTimeout(resolve, 600); })
+          ]).then(function() {
+            document.documentElement.classList.add('fonts-loaded');
+          }).catch(function() {
+            document.documentElement.classList.add('fonts-loaded');
+          });
+        } else {
+          document.documentElement.classList.add('fonts-loaded');
+        }
+      })();
+    </script>
+  </head>
+  <body class="bg-[#FAF7F0] text-[#262421] min-h-screen antialiased selection:bg-[#E7F0EA]">
+    <div id="root">
+      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#FAF7F0;font-family:system-ui,-apple-system,sans-serif;padding:20px;box-sizing:border-box;">
+        <!-- Top Sprout Icon -->
+        <div style="width:40px;height:40px;border-radius:50%;background:#E7F0EA;display:flex;align-items:center;justify-content:center;margin-bottom:12px;border:1px solid rgba(47,107,79,0.2);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 21V11" stroke="#1E4632" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M12 14.5C8.8 14.5 6 12 6 8.5C9.5 8.5 12 11.2 12 14.5Z" fill="#4E9F6E" stroke="#1E4632" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M12 12C12 8.5 14.5 5.5 18 5.5C18 9 15.2 12 12 12Z" fill="#84C497" stroke="#1E4632" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+        </div>
+
+        <!-- Krōw Wordmark with Sprout leaves over 'o' -->
+        <div style="display:flex;align-items:center;gap:6px;position:relative;">
+          <svg viewBox="0 0 220 64" style="height:48px;width:auto;overflow:visible;" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Left Sparkles */}
+            <g stroke="#4E9F6E" stroke-width="2.8" stroke-linecap="round" opacity="0.85">
+              <line x1="16" y1="24" x2="26" y2="29" />
+              <line x1="12" y1="37" x2="24" y2="37" />
+              <line x1="18" y1="50" x2="27" y2="45" />
+            </g>
+            {/* K */}
+            <path d="M52 19V57M52 40L72 19M58 36L75 57" stroke="#163A2B" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
+            {/* r */}
+            <path d="M92 31V57M92 40C95 34 102 30 109 32" stroke="#163A2B" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+            {/* o */}
+            <ellipse cx="140" cy="44" rx="15" ry="14" stroke="#163A2B" stroke-width="8" stroke-linecap="round"/>
+            {/* Sprout over o */}
+            <g transform="translate(140, 27)">
+              <path d="M0 3V-3" stroke="#163A2B" stroke-width="2.4" stroke-linecap="round"/>
+              <path d="M0 -2.5C-6 -2.5 -11 -7 -10 -13C-4 -12 -0.5 -8 0 -2.5Z" fill="#3B8B5B" stroke="#163A2B" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M0 -2.5C2 -8 7 -14 13 -13C13 -7 7 -2.5 0 -2.5Z" fill="#68BA86" stroke="#163A2B" stroke-width="1.6" stroke-linejoin="round"/>
+            </g>
+            {/* w */}
+            <path d="M172 31L179 57L191 39L203 57L210 31" stroke="#163A2B" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+
+        <div style="font-size:12px;font-weight:600;color:#3B6B50;margin-top:2px;letter-spacing:0.5px;">Simple tools. Better business.</div>
+
+        <!-- Kirana Storefront Graphic -->
+        <div style="margin-top:16px;margin-bottom:12px;">
+          <svg width="150" height="130" viewBox="0 0 240 210" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <line x1="20" y1="185" x2="220" y2="185" stroke="#1E4632" stroke-width="3" stroke-linecap="round"/>
+            <rect x="45" y="70" width="150" height="115" rx="4" fill="#FDFBF7" stroke="#1E4632" stroke-width="2.5"/>
+            <rect x="55" y="80" width="70" height="75" rx="3" fill="#FFFFFF" stroke="#1E4632" stroke-width="2"/>
+            <line x1="55" y1="105" x2="125" y2="105" stroke="#1E4632" stroke-width="2"/>
+            <line x1="55" y1="130" x2="125" y2="130" stroke="#1E4632" stroke-width="2"/>
+            <rect x="62" y="88" width="10" height="15" rx="2" fill="#FDF7E7" stroke="#1E4632" stroke-width="1.5"/>
+            <rect x="76" y="90" width="9" height="13" rx="2" fill="#E8F2EC" stroke="#1E4632" stroke-width="1.5"/>
+            <rect x="89" y="87" width="11" height="16" rx="2" fill="#FBF0D9" stroke="#1E4632" stroke-width="1.5"/>
+            <rect x="60" y="112" width="13" height="16" rx="1.5" fill="#E7F0EA" stroke="#1E4632" stroke-width="1.5"/>
+            <rect x="77" y="110" width="15" height="18" rx="1.5" fill="#FAF7F0" stroke="#1E4632" stroke-width="1.5"/>
+            <rect x="135" y="80" width="50" height="105" rx="3" fill="#FAF7F0" stroke="#1E4632" stroke-width="2"/>
+            <rect x="142" y="88" width="36" height="42" rx="2" fill="#FFFFFF" stroke="#1E4632" stroke-width="1.6"/>
+            <line x1="144" y1="140" x2="144" y2="152" stroke="#1E4632" stroke-width="2.4" stroke-linecap="round"/>
+            <rect x="65" y="24" width="110" height="22" rx="4" fill="#FFFFFF" stroke="#1E4632" stroke-width="2"/>
+            <text x="120" y="39" text-anchor="middle" fill="#1E4632" font-size="12" font-weight="900" letter-spacing="3">KROW</text>
+            <path d="M36 46H204L196 74C196 74 186 78 178 74C170 78 160 78 152 74C144 78 134 78 126 74C118 78 108 78 100 74C92 78 82 78 74 74C66 78 56 78 48 74L40 74L36 46Z" fill="#EBF4EE" stroke="#1E4632" stroke-width="2.5" stroke-linejoin="round"/>
+            <circle cx="48" cy="74" r="3" fill="#4E9F6E"/>
+            <circle cx="74" cy="74" r="3" fill="#4E9F6E"/>
+            <circle cx="100" cy="74" r="3" fill="#4E9F6E"/>
+            <circle cx="126" cy="74" r="3" fill="#4E9F6E"/>
+            <circle cx="152" cy="74" r="3" fill="#4E9F6E"/>
+            <circle cx="178" cy="74" r="3" fill="#4E9F6E"/>
+            <g transform="translate(24, 150)">
+              <path d="M4 18L7 34H17L20 18H4Z" fill="#DF8E57" stroke="#1E4632" stroke-width="1.8"/>
+              <path d="M12 18V6" stroke="#1E4632" stroke-width="1.8"/>
+              <path d="M12 12C6 11 4 4 10 3C13 8 13 11 12 12Z" fill="#4E9F6E" stroke="#1E4632" stroke-width="1.4"/>
+            </g>
+            <g transform="translate(196, 146)">
+              <path d="M5 22L8 38H19L22 22H5Z" fill="#DF8E57" stroke="#1E4632" stroke-width="1.8"/>
+              <path d="M13 22V5" stroke="#1E4632" stroke-width="1.8"/>
+              <path d="M13 15C7 14 3 8 9 6C13 10 13 14 13 15Z" fill="#4E9F6E" stroke="#1E4632" stroke-width="1.4"/>
+            </g>
+          </svg>
+        </div>
+
+        <div style="font-size:11px;color:#7A7265;margin-top:4px;">Small shops = Big dreams ♡</div>
+
+        <!-- Smooth Progress Loading Indicator -->
+        <div style="width:60px;height:4px;background:#E4DFD2;border-radius:99px;margin-top:16px;overflow:hidden;position:relative;">
+          <div style="position:absolute;top:0;left:0;bottom:0;width:50%;background:#2F6B4F;border-radius:99px;animation:krowPulse 1.2s infinite ease-in-out;"></div>
+        </div>
+        <style>
+          @keyframes krowPulse {
+            0% { left: -50%; width: 30%; }
+            50% { left: 35%; width: 50%; }
+            100% { left: 100%; width: 30%; }
+          }
+        </style>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

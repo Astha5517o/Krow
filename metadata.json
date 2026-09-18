@@ -1,0 +1,6 @@
+{
+  "name": "Krow",
+  "description": "Smart inventory, udhaar khata ledger, and profit manager for retail shopkeepers. Know More, Grow More.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,157 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Profile and configuration of the shop owner",
+      "type": "object",
+      "properties": {
+        "shopName": { "type": "string", "maxLength": 100 },
+        "language": { "type": "string", "enum": ["hi", "pa", "en"] },
+        "storeType": { "type": "string", "enum": ["kirana", "stationery"] },
+        "ownerName": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["shopName", "language", "storeType"]
+    },
+    "StockItem": {
+      "title": "Stock Item",
+      "description": "An inventory item tracked in the store",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 120 },
+        "barcode": { "type": "string", "maxLength": 60 },
+        "category": { "type": "string", "maxLength": 60 },
+        "unit": { "type": "string", "maxLength": 40 },
+        "currentQuantity": { "type": "number" },
+        "reorderLevel": { "type": "number" },
+        "buyPrice": { "type": "number" },
+        "sellPrice": { "type": "number" },
+        "packSize": { "type": "number" },
+        "isPerishable": { "type": "boolean" },
+        "exchangeType": { "type": "string", "enum": ["exchangeable", "loss", "none"] },
+        "supplierName": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "category", "unit", "currentQuantity", "reorderLevel", "buyPrice", "sellPrice"]
+    },
+    "Customer": {
+      "title": "Udhaar Customer",
+      "description": "A customer in the credit ledger",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "address": { "type": "string", "maxLength": 200 },
+        "balance": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "phone", "balance"]
+    },
+    "Transaction": {
+      "title": "Udhaar Transaction",
+      "description": "Credit given or payment received from a customer",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["credit", "payment"] },
+        "amount": { "type": "number" },
+        "note": { "type": "string", "maxLength": 200 },
+        "date": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["type", "amount", "date"]
+    },
+    "SaleRecord": {
+      "title": "Sale Record",
+      "description": "Record of an item sold with profit calculation",
+      "type": "object",
+      "properties": {
+        "itemId": { "type": "string", "maxLength": 100 },
+        "itemName": { "type": "string", "maxLength": 120 },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string", "maxLength": 40 },
+        "buyPrice": { "type": "number" },
+        "sellPrice": { "type": "number" },
+        "profit": { "type": "number" },
+        "date": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["itemName", "quantity", "profit", "date"]
+    },
+    "NightCount": {
+      "title": "Night Count",
+      "description": "Daily closing stock tally",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "totalSoldQty": { "type": "number" },
+        "totalProfit": { "type": "number" },
+        "itemsCheckedCount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["date", "totalProfit"]
+    },
+    "PublicStore": {
+      "title": "Public Store Profile",
+      "description": "Public store summary for customer stock view",
+      "type": "object",
+      "properties": {
+        "shopName": { "type": "string", "maxLength": 100 },
+        "storeType": { "type": "string", "maxLength": 60 },
+        "ownerPhone": { "type": "string", "maxLength": 20 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "itemCount": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["shopName", "storeType"]
+    },
+    "PublicCatalogItem": {
+      "title": "Public Catalog Item",
+      "description": "Sanitized item strictly containing public fields with no buy price or internal reorder numbers",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 120 },
+        "category": { "type": "string", "maxLength": 60 },
+        "unit": { "type": "string", "maxLength": 40 },
+        "sellPrice": { "type": "number" },
+        "status": { "type": "string", "enum": ["in_stock", "low_stock", "out_of_stock"] },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "category", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Shop profile and settings for the authenticated shopkeeper"
+    },
+    "/users/{userId}/items/{itemId}": {
+      "schema": "StockItem",
+      "description": "Stock items belonging to the shopkeeper"
+    },
+    "/users/{userId}/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Credit customers belonging to the shopkeeper"
+    },
+    "/users/{userId}/customers/{customerId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Credit and repayment transactions for a customer"
+    },
+    "/users/{userId}/sales/{saleId}": {
+      "schema": "SaleRecord",
+      "description": "Logged sales transactions with profit calculations"
+    },
+    "/users/{userId}/night_counts/{countId}": {
+      "schema": "NightCount",
+      "description": "Saved nightly closing counts"
+    },
+    "/public_stores/{storeId}": {
+      "schema": "PublicStore",
+      "description": "Public store summary readable by customers without login"
+    },
+    "/public_stores/{storeId}/catalog/{itemId}": {
+      "schema": "PublicCatalogItem",
+      "description": "Customer-facing stock availability without wholesale cost or margin data"
+    }
+  }
+}

@@ -1,0 +1,194 @@
+@import "tailwindcss";
+
+@theme {
+  --color-krow-bg: #FAF7F0;
+  --color-krow-card: #FFFFFF;
+  --color-krow-border: #E4DFD2;
+  --color-krow-primary: #2F6B4F;
+  --color-krow-primary-dark: #1E4632;
+  --color-krow-primary-soft: #E7F0EA;
+  --color-krow-mustard: #D9A62E;
+  --color-krow-mustard-soft: #FBF0D9;
+  --color-krow-red: #C1443B;
+  --color-krow-red-soft: #F8E6E4;
+  --color-krow-text: #262421;
+  --color-krow-muted: #726C60;
+  --color-krow-faint: #A29C8E;
+
+  --font-display: "Bricolage Grotesque", "Noto Sans Devanagari", "Noto Sans Gurmukhi", sans-serif;
+  --font-body: "Karla", "Noto Sans Devanagari", "Noto Sans Gurmukhi", "Noto Sans", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: #FAF7F0;
+  color: #262421;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  overscroll-behavior-y: none;
+}
+
+input, textarea {
+  user-select: text;
+}
+
+/* Material Symbols font display helper with zero-layout-shift and FOUT prevention */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined', sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  max-width: 1em;
+  max-height: 1em;
+  min-width: 1em;
+  min-height: 1em;
+  box-sizing: content-box;
+  overflow: hidden;
+  vertical-align: middle;
+  text-align: center;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.material-symbols-outlined.fill {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Prevent raw ligature words from flashing as unstyled text before icon font loads */
+html:not(.fonts-loaded) .material-symbols-outlined {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
+/* Smooth Hardware-Accelerated Barcode Laser Scan Beam */
+@keyframes laserSweep {
+  0% {
+    top: 10%;
+    opacity: 0.8;
+  }
+  50% {
+    top: 88%;
+    opacity: 1;
+  }
+  100% {
+    top: 10%;
+    opacity: 0.8;
+  }
+}
+
+.animate-laser-sweep {
+  animation: laserSweep 2s ease-in-out infinite;
+  will-change: top, opacity;
+}
+
+/* Ultra-Smooth Micro-Interactions and Spring Entry Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleUp {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheetUp {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scale-up {
+  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-sheet-up {
+  animation: sheetUp 0.32s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+}
+
+/* Interactive Card & Button Polish */
+.interactive-card {
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.interactive-card:active {
+  transform: scale(0.985);
+}
+
+/* Sleek Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D9D3C5;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #BDB5A4;
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+

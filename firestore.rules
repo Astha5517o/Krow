@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /{subcollection=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Public Customer Stock View (Read-only, no login required, strictly limited fields)
+    match /public_stores/{storeId} {
+      allow read: if true;
+      allow write: if isOwner(storeId);
+
+      match /catalog/{itemId} {
+        allow read: if true;
+        allow write: if isOwner(storeId);
+      }
+    }
+  }
+}
