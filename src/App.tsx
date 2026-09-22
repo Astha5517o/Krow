@@ -1,7 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { doc, getDoc, setDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { doc, setDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { db, auth, handleFirestoreError, OperationType } from './firebase';
+import {
+  subscribeToUserData,
+  seedInitialFirestoreDataIfEmpty,
+  clearUserFirestoreData,
+  recordUserLoginInfo,
+  batchSaveStockItems,
+  batchUpdateStockQuantities,
+  saveStockItemToFirestore,
+  deleteStockItemFromFirestore,
+  saveCustomerToFirestore,
+  deleteCustomerFromFirestore,
+  saveTransactionToFirestore,
+  saveSaleRecordToFirestore,
+} from './services/firestoreSyncService';
 import {
   StockItem,
   Customer,
@@ -30,6 +45,8 @@ import { QuickSellModal } from './components/QuickSellModal';
 import { OnboardingModal } from './components/OnboardingModal';
 import { ProfileModal } from './components/ProfileModal';
 import { ClearDataModal } from './components/ClearDataModal';
+import { AuthModal } from './components/AuthModal';
+import { PersonalizeShopModal } from './components/PersonalizeShopModal';
 import { KrowWelcomeFirstView } from './components/KrowWelcomeFirstView';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { usePWAInstall } from './hooks/usePWAInstall';
@@ -39,9 +56,13 @@ import { ScanToSellModal, CartItem } from './components/ScanToSellModal';
 import { ShareStockModal } from './components/ShareStockModal';
 import { PublicStockView } from './components/PublicStockView';
 import { publishStoreCatalog } from './services/publicCatalogService';
+import { getAllStationeryStockItems } from './data/stationeryMasterCatalog';
+import { translations } from './translations';
 
 export default function App() {
-  const currentUser = null;
+  const [currentUser, setCurrentUser] = useState<User | null>(() => auth.currentUser);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const pwa = usePWAInstall();
 
   // Profile & Settings
@@ -64,6 +85,8 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
   });
+
+  const t = translations[profile.language];
 
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(() => {
     return localStorage.getItem('krow_onboarded') === 'true';
@@ -135,29 +158,43 @@ export default function App() {
   const [scanToSellInitialLoose, setScanToSellInitialLoose] = useState<boolean>(false);
   const [showShareStockModal, setShowShareStockModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showPersonalizeModal, setShowPersonalizeModal] = useState(false);
   const [showClearDataModal, setShowClearDataModal] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Check if viewing customer public stock catalog (No Login Required)
   const [isPublicView, setIsPublicView] = useState<boolean>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return (
-      params.get('view') === 'public-stock' ||
-      params.has('public') ||
-      window.location.pathname.startsWith('/catalog')
-    );
+    try {
+      if (typeof window === 'undefined' || !window.location) return false;
+      const params = new URLSearchParams(window.location.search || '');
+      return (
+        params.get('view') === 'public-stock' ||
+        params.has('public') ||
+        Boolean(window.location.pathname && window.location.pathname.startsWith('/catalog'))
+      );
+    } catch {
+      return false;
+    }
   });
   const [publicStoreId, setPublicStoreId] = useState<string>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('store') || 'demo';
+    try {
+      if (typeof window === 'undefined' || !window.location) return 'demo';
+      const params = new URLSearchParams(window.location.search || '');
+      return params.get('store') || 'demo';
+    } catch {
+      return 'demo';
+    }
   });
 
-  // Automatically keep public catalog up to date with in-stock items
+  // Debounced sync to public customer catalog (prevents lag, avoids continuous network writes, stays in Free Spark Plan)
   useEffect(() => {
-    const storeId = profile.phone || 'demo';
-    publishStoreCatalog(storeId, profile.shopName, profile.storeType, profile.phone, stockItems);
-  }, [stockItems, profile.shopName, profile.storeType, profile.phone]);
+    const timer = setTimeout(() => {
+      const storeId = profile.phone || (currentUser ? currentUser.uid : 'demo');
+      publishStoreCatalog(storeId, profile.shopName, profile.storeType, profile.phone, stockItems);
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [stockItems, profile.shopName, profile.storeType, profile.phone, currentUser]);
 
   // Sync to local storage for fast client responsiveness
   useEffect(() => {
@@ -180,12 +217,155 @@ export default function App() {
     localStorage.setItem('krow_sales', JSON.stringify(salesRecords));
   }, [salesRecords]);
 
+  // Keep latest refs to prevent stale closures in async auth listener
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+  const stockItemsRef = useRef(stockItems);
+  stockItemsRef.current = stockItems;
+  const customersRef = useRef(customers);
+  customersRef.current = customers;
+  const transactionsRef = useRef(transactions);
+  transactionsRef.current = transactions;
+  const salesRecordsRef = useRef(salesRecords);
+  salesRecordsRef.current = salesRecords;
+
+  // Real-time Cloud Firestore & Firebase Auth Synchronization
+  useEffect(() => {
+    let dataUnsubscribe: (() => void) | null = null;
+
+    const authUnsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+
+      if (dataUnsubscribe) {
+        dataUnsubscribe();
+        dataUnsubscribe = null;
+      }
+
+      if (user) {
+        setIsSyncing(true);
+        const currentProfile = profileRef.current;
+
+        // 1. Record User Login Info & Login Session Audit in Firestore
+        recordUserLoginInfo(user.uid, user, currentProfile);
+
+        // 2. Update profile in local state
+        setProfile((prev) => ({
+          ...prev,
+          uid: user.uid,
+          email: user.email || prev.email,
+          ownerName: prev.ownerName || user.displayName || '',
+          photoURL: user.photoURL || prev.photoURL,
+        }));
+
+        // 3. Seed initial local inventory and customer data to Firestore if user's cloud db is empty
+        try {
+          await seedInitialFirestoreDataIfEmpty(user.uid, {
+            profile: {
+              ...currentProfile,
+              uid: user.uid,
+              email: user.email || undefined,
+              ownerName: currentProfile.ownerName || user.displayName || '',
+            },
+            stockItems: stockItemsRef.current,
+            customers: customersRef.current,
+            transactions: transactionsRef.current,
+            salesRecords: salesRecordsRef.current,
+          });
+        } catch (e) {
+          console.warn('Initial Firestore seed check:', e);
+        }
+
+        // 4. Subscribe to real-time updates from Firestore for this specific logged in user
+        dataUnsubscribe = subscribeToUserData(user.uid, {
+          onProfileChange: (cloudProfile) => {
+            setProfile((prev) => ({ ...prev, ...cloudProfile }));
+          },
+          onStockItemsChange: (cloudItems) => {
+            if (cloudItems && cloudItems.length > 0) {
+              setStockItems(cloudItems);
+            }
+          },
+          onCustomersChange: (cloudCusts) => {
+            if (cloudCusts && cloudCusts.length > 0) {
+              setCustomers(cloudCusts);
+            }
+          },
+          onTransactionsChange: (cloudTxMap) => {
+            if (cloudTxMap) {
+              setTransactions(cloudTxMap);
+            }
+          },
+          onSalesChange: (cloudSales) => {
+            if (cloudSales && cloudSales.length > 0) {
+              setSalesRecords(cloudSales);
+            }
+          },
+          onError: (err) => {
+            console.warn('Real-time sync notice:', err);
+          },
+        });
+
+        setIsSyncing(false);
+      } else {
+        setIsSyncing(false);
+      }
+    });
+
+    return () => {
+      if (dataUnsubscribe) dataUnsubscribe();
+      authUnsubscribe();
+    };
+  }, []);
+
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
     }, 3000);
   }, []);
+
+  // Manual trigger to force cloud sync
+  const handleManualSync = async () => {
+    if (!currentUser) {
+      setShowAuthModal(true);
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      await seedInitialFirestoreDataIfEmpty(currentUser.uid, {
+        profile,
+        stockItems,
+        customers,
+        transactions,
+        salesRecords,
+      });
+      showToast(
+        profile.language === 'en'
+          ? 'Cloud database synchronized!'
+          : 'क्लाउड डेटाबेस सफलतापूर्वक सिंक हो गया!'
+      );
+    } catch (err) {
+      console.warn('Manual sync error:', err);
+      showToast('सिंक करने में समस्या आई, कृपया दोबारा कोशिश करें');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Sign out handler
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      setCurrentUser(null);
+      showToast(
+        profile.language === 'en'
+          ? 'Logged out successfully'
+          : 'सफलतापूर्वक लॉगआउट कर दिया गया'
+      );
+    } catch (e) {
+      console.error('Sign out error:', e);
+    }
+  };
 
   // Clear Store Data Handler
   const handleClearData = async (options: {
@@ -215,25 +395,7 @@ export default function App() {
 
     if (currentUser) {
       try {
-        if (options.clearStock) {
-          const stockRef = collection(db, `users/${currentUser.uid}/stock_items`);
-          const snap = await getDocs(stockRef);
-          snap.forEach((d) => deleteDoc(d.ref));
-        }
-        if (options.clearCustomers) {
-          const custRef = collection(db, `users/${currentUser.uid}/customers`);
-          const snap = await getDocs(custRef);
-          snap.forEach((d) => deleteDoc(d.ref));
-
-          const txRef = collection(db, `users/${currentUser.uid}/transactions`);
-          const txSnap = await getDocs(txRef);
-          txSnap.forEach((d) => deleteDoc(d.ref));
-        }
-        if (options.clearSales) {
-          const salesRef = collection(db, `users/${currentUser.uid}/sales`);
-          const snap = await getDocs(salesRef);
-          snap.forEach((d) => deleteDoc(d.ref));
-        }
+        await clearUserFirestoreData(currentUser.uid, options);
       } catch (e) {
         console.warn('Firestore clear error:', e);
       }
@@ -271,6 +433,11 @@ export default function App() {
     setHasCompletedOnboarding(true);
     localStorage.setItem('krow_onboarded', 'true');
 
+    if (storeType === 'stationery') {
+      const stationeryStock = getAllStationeryStockItems();
+      setStockItems(stationeryStock);
+    }
+
     if (currentUser) {
       const path = `users/${currentUser.uid}`;
       try {
@@ -281,8 +448,22 @@ export default function App() {
     }
   };
 
-  // Stock Handlers
-  const handleSaveStockItem = async (
+  // Load Full Stationery Catalog (71 items with barcodes & MRP)
+  const handleLoadStationeryInventory = () => {
+    const stationeryStock = getAllStationeryStockItems();
+    setStockItems(stationeryStock);
+    if (currentUser) {
+      batchSaveStockItems(currentUser.uid, stationeryStock);
+    }
+    showToast(
+      profile.language === 'en'
+        ? '71 stationery items with barcodes loaded into stock!'
+        : '71 स्टेशनरी सामान (बारकोड सहित) स्टॉक में सफलतापूर्वक लोड हो गए!'
+    );
+  };
+
+  // Stock Handlers - Instant UI update + background asynchronous cloud sync
+  const handleSaveStockItem = (
     itemData: Omit<StockItem, 'id' | 'createdAt'>,
     existingId?: string
   ) => {
@@ -296,12 +477,13 @@ export default function App() {
       showToast('सामान का विवरण अपडेट कर दिया गया');
 
       if (currentUser) {
-        const path = `users/${currentUser.uid}/items/${existingId}`;
-        try {
-          await setDoc(doc(db, 'users', currentUser.uid, 'items', existingId), itemData, { merge: true });
-        } catch (e) {
-          handleFirestoreError(e, OperationType.UPDATE, path);
-        }
+        const item = stockItems.find((i) => i.id === existingId);
+        saveStockItemToFirestore(currentUser.uid, {
+          ...itemData,
+          id: existingId,
+          createdAt: item?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }).catch((e) => console.warn('Background save stock item:', e));
       }
     } else {
       const newItem: StockItem = {
@@ -313,12 +495,9 @@ export default function App() {
       showToast('नया सामान स्टॉक में जुड़ गया');
 
       if (currentUser) {
-        const path = `users/${currentUser.uid}/items/${newItem.id}`;
-        try {
-          await setDoc(doc(db, 'users', currentUser.uid, 'items', newItem.id), newItem);
-        } catch (e) {
-          handleFirestoreError(e, OperationType.CREATE, path);
-        }
+        saveStockItemToFirestore(currentUser.uid, newItem).catch((e) =>
+          console.warn('Background save new stock item:', e)
+        );
       }
     }
 
@@ -326,20 +505,43 @@ export default function App() {
     setEditingStockItem(undefined);
   };
 
-  const handleDeleteStockItem = async (id: string) => {
+  const handleDeleteStockItem = (id: string) => {
     setStockItems(stockItems.filter((i) => i.id !== id));
     setShowAddItemModal(false);
     setEditingStockItem(undefined);
     showToast('सामान हटा दिया गया');
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/items/${id}`;
-      try {
-        await deleteDoc(doc(db, 'users', currentUser.uid, 'items', id));
-      } catch (e) {
-        handleFirestoreError(e, OperationType.DELETE, path);
-      }
+      deleteStockItemFromFirestore(currentUser.uid, id).catch((e) =>
+        console.warn('Background delete stock item:', e)
+      );
     }
+  };
+
+  // Batch restock when daily salesman delivery van unloads items at the shop
+  const handleBatchReceiveStock = (itemsToReceive: { itemId: string; addedQty: number }[]) => {
+    const updates: { itemId: string; currentQuantity: number }[] = [];
+    setStockItems((prev) => {
+      const map = new Map(itemsToReceive.map((i) => [i.itemId, i.addedQty]));
+      return prev.map((item) => {
+        if (map.has(item.id)) {
+          const updatedQty = item.currentQuantity + (map.get(item.id) || 0);
+          updates.push({ itemId: item.id, currentQuantity: updatedQty });
+          return {
+            ...item,
+            currentQuantity: updatedQty,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return item;
+      });
+    });
+
+    if (currentUser && updates.length > 0) {
+      batchUpdateStockQuantities(currentUser.uid, updates);
+    }
+
+    showToast(t.stockReceivedSuccessMsg || 'वैन से माल स्टॉक में जोड़ दिया गया!');
   };
 
   // Udhaar Transaction Handlers
@@ -384,22 +586,17 @@ export default function App() {
     );
 
     if (currentUser) {
-      const txPath = `users/${currentUser.uid}/customers/${customerId}/transactions/${newTx.id}`;
-      setDoc(doc(db, 'users', currentUser.uid, 'customers', customerId, 'transactions', newTx.id), newTx).catch((e) => {
-        handleFirestoreError(e, OperationType.CREATE, txPath);
-      });
+      saveTransactionToFirestore(currentUser.uid, newTx).catch(() => {});
 
       const cust = customers.find((c) => c.id === customerId);
       const updatedBal = type === 'credit' ? (cust?.balance || 0) + amount : Math.max(0, (cust?.balance || 0) - amount);
-      const custPath = `users/${currentUser.uid}/customers/${customerId}`;
-      setDoc(doc(db, 'users', currentUser.uid, 'customers', customerId), {
+      saveCustomerToFirestore(currentUser.uid, {
+        ...(cust || { id: customerId, name: '', phone: '', createdAt: new Date().toISOString() }),
         balance: updatedBal,
         lastTransactionDate: txDate,
         lastTransactionAmount: amount,
         lastTransactionType: type,
-      }, { merge: true }).catch((e) => {
-        handleFirestoreError(e, OperationType.UPDATE, custPath);
-      });
+      }).catch(() => {});
     }
 
     showToast(type === 'credit' ? 'उधार सफलतापूर्वक दर्ज किया' : 'जमा राशि दर्ज कर दी गई');
@@ -415,10 +612,7 @@ export default function App() {
     setCustomers([newCustomer, ...customers]);
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/customers/${newCustomer.id}`;
-      setDoc(doc(db, 'users', currentUser.uid, 'customers', newCustomer.id), newCustomer).catch((e) => {
-        handleFirestoreError(e, OperationType.CREATE, path);
-      });
+      saveCustomerToFirestore(currentUser.uid, newCustomer).catch(() => {});
     }
 
     showToast('नया ग्राहक खाता जुड़ गया');
@@ -428,10 +622,7 @@ export default function App() {
     setCustomers(customers.filter((c) => c.id !== customerId));
 
     if (currentUser) {
-      const path = `users/${currentUser.uid}/customers/${customerId}`;
-      deleteDoc(doc(db, 'users', currentUser.uid, 'customers', customerId)).catch((e) => {
-        handleFirestoreError(e, OperationType.DELETE, path);
-      });
+      deleteCustomerFromFirestore(currentUser.uid, customerId).catch(() => {});
     }
 
     showToast('ग्राहक खाता हटा दिया गया');
@@ -449,17 +640,8 @@ export default function App() {
     );
 
     if (currentUser) {
-      const salePath = `users/${currentUser.uid}/sales/${sale.id}`;
-      setDoc(doc(db, 'users', currentUser.uid, 'sales', sale.id), sale).catch((e) => {
-        handleFirestoreError(e, OperationType.CREATE, salePath);
-      });
-
-      const itemPath = `users/${currentUser.uid}/items/${sale.itemId}`;
-      setDoc(doc(db, 'users', currentUser.uid, 'items', sale.itemId), {
-        currentQuantity: remainingQty,
-      }, { merge: true }).catch((e) => {
-        handleFirestoreError(e, OperationType.UPDATE, itemPath);
-      });
+      saveSaleRecordToFirestore(currentUser.uid, sale).catch(() => {});
+      batchUpdateStockQuantities(currentUser.uid, [{ itemId: sale.itemId, currentQuantity: remainingQty }]);
     }
 
     showToast(`बिक्री सफल! +₹${sale.profit.toFixed(0)} मुनाफ़ा दर्ज`);
@@ -507,16 +689,23 @@ export default function App() {
         timestamp: Date.now(),
       };
       newSales.push(sale);
-
-      if (currentUser) {
-        const salePath = `users/${currentUser.uid}/sales/${sale.id}`;
-        setDoc(doc(db, 'users', currentUser.uid, 'sales', sale.id), sale).catch((e) => {
-          handleFirestoreError(e, OperationType.CREATE, salePath);
-        });
-      }
     });
 
     setSalesRecords((prev) => [...newSales, ...prev]);
+
+    if (currentUser) {
+      // 1. Background save sales records
+      for (const sale of newSales) {
+        saveSaleRecordToFirestore(currentUser.uid, sale).catch(() => {});
+      }
+      // 2. Batch update stock quantities in Firestore
+      const stockUpdates = cart.map((ci) => {
+        const currentItem = stockItems.find((s) => s.id === ci.item.id);
+        const remaining = Math.max(0, (currentItem?.currentQuantity || 0) - ci.quantity);
+        return { itemId: ci.item.id, currentQuantity: remaining };
+      });
+      batchUpdateStockQuantities(currentUser.uid, stockUpdates);
+    }
 
     const totalBill = cart.reduce((sum, ci) => sum + ci.lineTotal, 0);
     const totalProfit = cart.reduce((sum, ci) => sum + ci.lineProfit, 0);
@@ -621,23 +810,17 @@ export default function App() {
         handleFirestoreError(e, OperationType.CREATE, countPath);
       });
 
-      // Save each new sale generated from night count
+      // Save each new sale generated from night count in background
       for (const sale of newSales) {
-        const salePath = `users/${currentUser.uid}/sales/${sale.id}`;
-        setDoc(doc(db, 'users', currentUser.uid, 'sales', sale.id), sale).catch((e) => {
-          handleFirestoreError(e, OperationType.CREATE, salePath);
-        });
+        saveSaleRecordToFirestore(currentUser.uid, sale).catch(() => {});
       }
 
-      // Update all stock items in firestore
-      for (const update of updatedStock) {
-        const itemPath = `users/${currentUser.uid}/items/${update.id}`;
-        setDoc(doc(db, 'users', currentUser.uid, 'items', update.id), {
-          currentQuantity: update.newQty,
-        }, { merge: true }).catch((e) => {
-          handleFirestoreError(e, OperationType.UPDATE, itemPath);
-        });
-      }
+      // Fast atomic batch update for all audited stock items
+      const qtyUpdates = updatedStock.map((u) => ({
+        itemId: u.id,
+        currentQuantity: u.newQty,
+      }));
+      batchUpdateStockQuantities(currentUser.uid, qtyUpdates);
     }
 
     showToast(`रात की गिनती सुरक्षित! आज का शुद्ध मुनाफ़ा: +₹${totalProfit.toFixed(0)}`);
@@ -710,23 +893,15 @@ export default function App() {
     });
 
     if (currentUser) {
-      matchedUpdates.forEach((mu) => {
-        const itemPath = `users/${currentUser.uid}/items/${mu.id}`;
-        setDoc(doc(db, 'users', currentUser.uid, 'items', mu.id), {
-          currentQuantity: mu.currentQuantity,
-          buyPrice: mu.buyPrice,
-          supplierName: mu.supplierName,
-        }, { merge: true }).catch((e) => {
-          handleFirestoreError(e, OperationType.UPDATE, itemPath);
-        });
-      });
-
-      newlyCreatedItems.forEach((newItem) => {
-        const itemPath = `users/${currentUser.uid}/items/${newItem.id}`;
-        setDoc(doc(db, 'users', currentUser.uid, 'items', newItem.id), newItem).catch((e) => {
-          handleFirestoreError(e, OperationType.CREATE, itemPath);
-        });
-      });
+      if (newlyCreatedItems.length > 0) {
+        batchSaveStockItems(currentUser.uid, newlyCreatedItems);
+      }
+      if (matchedUpdates.length > 0) {
+        batchUpdateStockQuantities(
+          currentUser.uid,
+          matchedUpdates.map((m) => ({ itemId: m.id, currentQuantity: m.currentQuantity }))
+        );
+      }
     }
 
     showToast(`पर्चे से ${itemsToAdd.length} आयटम स्टॉक में जुड़ गए!`);
@@ -754,6 +929,13 @@ export default function App() {
     );
   }
 
+  // Customer Stock Catalog Sharing Handler
+  const handleOpenShareStock = () => {
+    const storeId = profile.phone || (currentUser ? currentUser.uid : 'demo');
+    publishStoreCatalog(storeId, profile.shopName, profile.storeType, profile.phone, stockItems);
+    setShowShareStockModal(true);
+  };
+
   // Show Onboarding if not completed
   if (!hasCompletedOnboarding) {
     return (
@@ -773,11 +955,14 @@ export default function App() {
       {/* Fixed Sticky Header */}
       <Header
         profile={profile}
+        currentUser={currentUser}
+        isSyncing={isSyncing}
         onLanguageChange={(lang) => setProfile((p) => ({ ...p, language: lang }))}
         onOpenProfile={() => setShowProfileModal(true)}
-        onOpenStoreSelect={() => setShowProfileModal(true)}
-        onOpenShareStock={() => setShowShareStockModal(true)}
+        onOpenStoreSelect={() => setShowPersonalizeModal(true)}
+        onOpenShareStock={handleOpenShareStock}
         onOpenWelcome={() => setShowWelcomeModal(true)}
+        onOpenAuth={() => setShowAuthModal(true)}
       />
 
       {/* Main Screen Container (responsive mobile-first, max-w-md centered) */}
@@ -797,16 +982,19 @@ export default function App() {
                 customers={customers}
                 transactions={transactions}
                 salesRecords={salesRecords}
+                currentUser={currentUser}
+                onOpenAuth={() => setShowAuthModal(true)}
                 onOpenQuickSell={(item) => {
                   if (item) {
-                    handleOpenScanQuickSell(item);
+                    setQuickSellTargetItem(item);
+                    setShowQuickSellModal(true);
                   } else {
                     setQuickSellTargetItem(undefined);
                     setShowQuickSellModal(true);
                   }
                 }}
                 onOpenScanToSell={() => handleOpenScanQuickSell()}
-                onOpenShareStock={() => setShowShareStockModal(true)}
+                onOpenShareStock={handleOpenShareStock}
                 onOpenScanBill={() => setShowScanBillModal(true)}
                 onOpenAddItem={() => {
                   setInitialBarcodeForNewItem(undefined);
@@ -840,10 +1028,11 @@ export default function App() {
                 }}
                 onOpenOrderList={() => setShowOrderListModal(true)}
                 onQuickSell={(item) => {
-                  handleOpenScanQuickSell(item);
+                  setQuickSellTargetItem(item);
+                  setShowQuickSellModal(true);
                 }}
                 onOpenScanToSell={() => handleOpenScanQuickSell()}
-                onOpenShareStock={() => setShowShareStockModal(true)}
+                onOpenShareStock={handleOpenShareStock}
               />
             </motion.div>
           )}
@@ -928,7 +1117,11 @@ export default function App() {
         <OrderListModal
           language={profile.language}
           stockItems={stockItems}
+          shopName={profile.shopName}
+          ownerName={profile.ownerName}
+          phone={profile.phone}
           onClose={() => setShowOrderListModal(false)}
+          onBatchReceiveStock={handleBatchReceiveStock}
         />
       )}
 
@@ -952,13 +1145,17 @@ export default function App() {
         />
       )}
 
-      {/* 5. Quick Sell Modal (Loose / Manual sales) */}
+      {/* 5. Quick Sell Modal (Counter POS: Bring items on counter, make list, sell) */}
       {showQuickSellModal && (
         <QuickSellModal
           language={profile.language}
           stockItems={stockItems}
+          customers={customers}
+          shopName={profile.shopName}
           preselectedItem={quickSellTargetItem}
+          onConfirmCartSale={handleConfirmScanToSell}
           onRecordSale={handleRecordSale}
+          onAddUdhaarTransaction={handleAddTransaction}
           onSwitchToScanToSell={() => {
             const currentItem = quickSellTargetItem;
             setShowQuickSellModal(false);
@@ -1012,10 +1209,17 @@ export default function App() {
       {showProfileModal && (
         <ProfileModal
           profile={profile}
+          currentUser={currentUser}
+          isSyncing={isSyncing}
           onUpdateProfile={handleUpdateProfile}
           onClose={() => setShowProfileModal(false)}
           onOpenClearData={() => setShowClearDataModal(true)}
           onOpenWelcome={() => setShowWelcomeModal(true)}
+          onLoadStationeryInventory={handleLoadStationeryInventory}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onOpenPersonalize={() => setShowPersonalizeModal(true)}
+          onSignOut={handleSignOut}
+          onManualSync={handleManualSync}
           onInstallApp={async () => {
             if (pwa.isIOS) {
               showToast(
@@ -1059,6 +1263,57 @@ export default function App() {
           onOpenShop={(lang, storeType) => {
             handleUpdateProfile({ language: lang, storeType });
             setShowWelcomeModal(false);
+          }}
+        />
+      )}
+
+      {/* 11. Firebase Authentication Modal (Google 1-Click Sign-in/Sign-up) */}
+      {showAuthModal && (
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          onSuccess={(customShopName, isNewUser, user) => {
+            setShowAuthModal(false);
+            if (user) {
+              handleUpdateProfile({
+                shopName: customShopName || profile.shopName,
+                ownerName: user.displayName || profile.ownerName,
+                logoUrl: user.photoURL || profile.logoUrl,
+              });
+            } else if (customShopName) {
+              handleUpdateProfile({ shopName: customShopName });
+            }
+            // Automatically launch Shop Personalization so person can customize their shop immediately!
+            setShowPersonalizeModal(true);
+            showToast(
+              profile.language === 'en'
+                ? 'Signed in with Google! Customize your shop logo, title & category.'
+                : 'Google से लॉगिन सफल! अब अपनी दुकान का लोगो, नाम और प्रकार चुनें।'
+            );
+          }}
+          language={profile.language}
+        />
+      )}
+
+      {/* 12. Personalize Shop Branding Modal (Logo Upload, Title & Category) */}
+      {showPersonalizeModal && (
+        <PersonalizeShopModal
+          isOpen={showPersonalizeModal}
+          profile={profile}
+          currentUser={currentUser}
+          language={profile.language}
+          onClose={() => setShowPersonalizeModal(false)}
+          onSave={async (updated) => {
+            await handleUpdateProfile(updated);
+            if (updated.storeType === 'stationery' && stockItems.length === 0) {
+              const stationeryStock = getAllStationeryStockItems();
+              setStockItems(stationeryStock);
+            }
+            showToast(
+              profile.language === 'en'
+                ? 'Shop branding & settings saved!'
+                : 'आपकी दुकान की सजावट व सेटिंग्स सुरक्षित हो गईं!'
+            );
           }}
         />
       )}

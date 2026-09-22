@@ -1,42 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#0E3522"/>
-      <stop offset="50%" stop-color="#0A291A"/>
-      <stop offset="100%" stop-color="#051A10"/>
+    <linearGradient id="krowBg" x1="256" y1="0" x2="256" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E4632"/>
+      <stop offset="100%" stop-color="#122F22"/>
     </linearGradient>
-    <linearGradient id="gold" x1="192" y1="64" x2="448" y2="320" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FEF08A"/>
-      <stop offset="35%" stop-color="#FDE047"/>
-      <stop offset="70%" stop-color="#F59E0B"/>
-      <stop offset="100%" stop-color="#D97706"/>
-    </linearGradient>
-    <linearGradient id="stem" x1="88" y1="88" x2="176" y2="432" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="60%" stop-color="#F8FAFC"/>
-      <stop offset="100%" stop-color="#E2E8F0"/>
-    </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000000" flood-opacity="0.4"/>
+    <filter id="krowSoftDrop" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0B1C14" flood-opacity="0.3"/>
     </filter>
   </defs>
 
-  <!-- Background squircle -->
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#F59E0B" stroke-width="4" stroke-opacity="0.3"/>
+  <!-- Background Squircle -->
+  <rect width="512" height="512" rx="112" fill="url(#krowBg)"/>
+  <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#2F6B4F" stroke-width="4" stroke-opacity="0.4"/>
 
-  <!-- Logo Mark Group with Shadow -->
-  <g filter="url(#shadow)">
-    <!-- 1. "KNOW" Vertical Spine Pillar -->
-    <rect x="88" y="88" width="76.8" height="336" rx="38.4" fill="url(#stem)"/>
-
-    <!-- 2. "GROW" Upper Dynamic Chevron (Sunrise Gold) -->
-    <path d="M211.2 256.0 L355.2 112.0 C364.8 102.4 380.8 102.4 390.4 112.0 L412.8 134.4 C422.4 144.0 422.4 160.0 412.8 169.6 L284.8 297.6 L211.2 256.0 Z" fill="url(#gold)"/>
-
-    <!-- 3. Foundation Branch (Grounded Customer Base) -->
-    <path d="M211.2 256.0 L358.4 400.0 C368.0 409.6 384.0 409.6 393.6 400.0 L416.0 377.6 C425.6 368.0 425.6 352.0 416.0 342.4 L291.2 219.2 L211.2 256.0 Z" fill="#FFFFFF" fill-opacity="0.95"/>
-
-    <!-- 4. The 4-Point Diamond Star Spark of Ambition (First Business Dream) -->
-    <path d="M408 42 C408 69.2 427.2 88.4 454.4 88.4 C427.2 88.4 408 107.6 408 134.8 C408 107.6 388.8 88.4 361.6 88.4 C388.8 88.4 408 69.2 408 42 Z" fill="#FEF08A"/>
+  <!-- Master Krōw Sprout Emblem -->
+  <g filter="url(#krowSoftDrop)">
+    <!-- Central Stem -->
+    <path
+      d="M256 416V208"
+      stroke="#E8F2EC"
+      stroke-width="36"
+      stroke-linecap="round"
+    />
+    <!-- Left Leaf (Deep Sprout Green) -->
+    <path
+      d="M256 288C184 288 128 240 128 168C200 168 256 216 256 288Z"
+      fill="#3FA369"
+      stroke="#E8F2EC"
+      stroke-width="24"
+      stroke-linejoin="round"
+    />
+    <!-- Right Leaf (Fresh Sage Green) -->
+    <path
+      d="M256 240C256 168 312 120 384 120C384 192 328 240 256 240Z"
+      fill="#6BC58D"
+      stroke="#E8F2EC"
+      stroke-width="24"
+      stroke-linejoin="round"
+    />
   </g>
 </svg>

@@ -1,3 +1,6 @@
+import { KARYANA_MASTER_ITEMS } from './karyanaMasterCatalog';
+import { STATIONERY_MASTER_ITEMS } from './stationeryMasterCatalog';
+
 export interface MasterProduct {
   barcode: string;
   name: string;
@@ -2902,6 +2905,74 @@ export function lookupMasterBarcode(rawCode: string): MasterProduct | undefined 
         return pNorm.endsWith(normalized) || normalized.endsWith(pNorm);
       });
       if (suffixMatch) return suffixMatch;
+    }
+  }
+
+  // 4. Check Karyana Master Catalog for accurate grocery staples and items
+  const karyanaExact = KARYANA_MASTER_ITEMS.find((k) => k.barcode === clean);
+  if (karyanaExact && karyanaExact.barcode) {
+    return {
+      barcode: karyanaExact.barcode,
+      name: karyanaExact.name,
+      nameEn: karyanaExact.nameEn,
+      category: karyanaExact.category,
+      unit: karyanaExact.unit,
+      sellPrice: karyanaExact.sellPrice,
+      buyPrice: karyanaExact.buyPrice,
+      brand: karyanaExact.subCategory || 'Karyana',
+      icon: 'inventory_2',
+    };
+  }
+
+  // 5. Check Stationery Master Catalog for stationery products and barcodes
+  const stationeryExact = STATIONERY_MASTER_ITEMS.find((s) => s.barcode === clean);
+  if (stationeryExact && stationeryExact.barcode) {
+    return {
+      barcode: stationeryExact.barcode,
+      name: stationeryExact.name,
+      nameEn: stationeryExact.nameEn,
+      category: stationeryExact.category,
+      unit: stationeryExact.unit,
+      sellPrice: stationeryExact.sellPrice,
+      buyPrice: stationeryExact.buyPrice,
+      brand: stationeryExact.subCategory || 'Stationery',
+      icon: 'edit_note',
+    };
+  }
+
+  if (normalized) {
+    const karyanaNorm = KARYANA_MASTER_ITEMS.find(
+      (k) => k.barcode && normalizeBarcode(k.barcode) === normalized
+    );
+    if (karyanaNorm && karyanaNorm.barcode) {
+      return {
+        barcode: karyanaNorm.barcode,
+        name: karyanaNorm.name,
+        nameEn: karyanaNorm.nameEn,
+        category: karyanaNorm.category,
+        unit: karyanaNorm.unit,
+        sellPrice: karyanaNorm.sellPrice,
+        buyPrice: karyanaNorm.buyPrice,
+        brand: karyanaNorm.subCategory || 'Karyana',
+        icon: 'inventory_2',
+      };
+    }
+
+    const stationeryNorm = STATIONERY_MASTER_ITEMS.find(
+      (s) => s.barcode && normalizeBarcode(s.barcode) === normalized
+    );
+    if (stationeryNorm && stationeryNorm.barcode) {
+      return {
+        barcode: stationeryNorm.barcode,
+        name: stationeryNorm.name,
+        nameEn: stationeryNorm.nameEn,
+        category: stationeryNorm.category,
+        unit: stationeryNorm.unit,
+        sellPrice: stationeryNorm.sellPrice,
+        buyPrice: stationeryNorm.buyPrice,
+        brand: stationeryNorm.subCategory || 'Stationery',
+        icon: 'edit_note',
+      };
     }
   }
 

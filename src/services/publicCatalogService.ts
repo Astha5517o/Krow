@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { StockItem, PublicCatalogItem, PublicStoreInfo } from '../types';
 import { INITIAL_STOCK_ITEMS } from '../data/defaultData';
@@ -9,6 +9,7 @@ const LOCAL_PUBLIC_CATALOG_KEY = 'krow_public_catalog_items';
 /**
  * Publishes a shop's public catalog to Firestore (/public_stores/{storeId})
  * STRICT PRIVACY: NEVER writes buyPrice, reorderLevel, profit, or supplier details.
+ * Uses writeBatch for fast, atomic, 1-network-call execution.
  */
 export async function publishStoreCatalog(
   storeId: string,
@@ -17,6 +18,8 @@ export async function publishStoreCatalog(
   phone?: string,
   items: StockItem[] = []
 ): Promise<void> {
+  if (!storeId) return;
+
   const sanitizedItems: PublicCatalogItem[] = items.map((item) => {
     let status: 'in_stock' | 'low_stock' | 'out_of_stock' = 'in_stock';
     if (item.currentQuantity <= 0) {
@@ -53,7 +56,7 @@ export async function publishStoreCatalog(
     // ignore local storage errors
   }
 
-  // Publish to Firestore
+  // Publish to Firestore using fast writeBatch
   try {
     const storeRef = doc(db, 'public_stores', storeId);
     await setDoc(storeRef, {
@@ -65,17 +68,23 @@ export async function publishStoreCatalog(
       updatedAt: storeInfo.lastUpdated,
     });
 
-    // Write sanitized items to subcollection /public_stores/{storeId}/catalog/{itemId}
-    for (const item of sanitizedItems) {
-      const itemRef = doc(db, 'public_stores', storeId, 'catalog', item.id);
-      await setDoc(itemRef, {
-        name: item.name,
-        category: item.category,
-        unit: item.unit,
-        sellPrice: item.sellPrice ?? 0,
-        status: item.status,
-        updatedAt: item.updatedAt,
-      });
+    // Write in chunks of 400 with writeBatch for fast execution
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < sanitizedItems.length; i += CHUNK_SIZE) {
+      const chunk = sanitizedItems.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      for (const item of chunk) {
+        const itemRef = doc(db, 'public_stores', storeId, 'catalog', item.id);
+        batch.set(itemRef, {
+          name: item.name,
+          category: item.category,
+          unit: item.unit,
+          sellPrice: item.sellPrice ?? 0,
+          status: item.status,
+          updatedAt: item.updatedAt,
+        });
+      }
+      await batch.commit();
     }
   } catch (err) {
     // If not authenticated yet or offline, local cache will serve the view

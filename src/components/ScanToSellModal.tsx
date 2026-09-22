@@ -1,17 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { StockItem, Language } from '../types';
+import { StockItem, Language, CartItem } from '../types';
 import { playScanBeep, playSuccessChime } from '../utils/audio';
+import { safeStopScanner } from '../utils/scannerUtils';
 import { lookupMasterBarcode, MasterProduct } from '../data/masterBarcodes';
+import { LooseWeightSellModal } from './LooseWeightSellModal';
 
-export interface CartItem {
-  item: StockItem;
-  quantity: number;
-  sellPrice: number;
-  buyPrice: number;
-  lineTotal: number;
-  lineProfit: number;
-}
+export type { CartItem };
 
 interface ScanToSellModalProps {
   language: Language;
@@ -43,11 +38,19 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
   // Scanner state
   const [scannerActive, setScannerActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [torchOn, setTorchOn] = useState(false);
   const [isFrontCamera, setIsFrontCamera] = useState(false);
   const [macroZoom, setMacroZoom] = useState(false);
   const macroZoomRef = useRef(false);
+
+  // Inline Quick-Add Item for Unrecognized Barcodes (Never store or add raw serial number!)
+  const [newQuickItemName, setNewQuickItemName] = useState('');
+  const [newQuickItemPrice, setNewQuickItemPrice] = useState('10');
+  const [newQuickItemBuyPrice, setNewQuickItemBuyPrice] = useState('8');
+  const [newQuickItemCategory, setNewQuickItemCategory] = useState('बिस्कुट व नमकीन');
+  const [showAdvancedUnrecognizedOptions, setShowAdvancedUnrecognizedOptions] = useState(false);
 
   // Keep macroZoomRef synced
   useEffect(() => {
@@ -67,6 +70,8 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
   const [selectedLooseCategory, setSelectedLooseCategory] = useState('all');
   const [selectedLooseItem, setSelectedLooseItem] = useState<StockItem | null>(null);
   const [looseQty, setLooseQty] = useState<number>(1);
+  const [showLooseWeightModal, setShowLooseWeightModal] = useState(false);
+  const [looseWeightTargetItem, setLooseWeightTargetItem] = useState<StockItem | undefined>(undefined);
 
   // Cart / session state - initialized with initialItem if provided
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -202,6 +207,44 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
     // 2. Check in Central Master Barcode Catalog (Maggi, Coke, Thums Up, Lay's, etc.)
     const masterMatch = lookupMasterBarcode(code);
     if (masterMatch) {
+      if (rapidModeRef.current) {
+        // Automatically add recognized master product to stock & cart
+        let createdItem: StockItem;
+        if (onAddMasterItemToStock) {
+          createdItem = onAddMasterItemToStock({
+            name: language === 'en' ? masterMatch.nameEn : masterMatch.name,
+            category: masterMatch.category,
+            unit: masterMatch.unit || 'पैकेट',
+            barcode: code,
+            buyPrice: masterMatch.buyPrice || Math.round(masterMatch.sellPrice * 0.85),
+            sellPrice: masterMatch.sellPrice,
+            currentQuantity: 20,
+            reorderLevel: 5,
+            isPerishable: false,
+            exchangeType: 'none',
+          });
+        } else {
+          createdItem = {
+            id: 'item-master-' + Date.now(),
+            name: language === 'en' ? masterMatch.nameEn : masterMatch.name,
+            category: masterMatch.category,
+            unit: masterMatch.unit || 'पैकेट',
+            barcode: code,
+            buyPrice: masterMatch.buyPrice || Math.round(masterMatch.sellPrice * 0.85),
+            sellPrice: masterMatch.sellPrice,
+            currentQuantity: 20,
+            reorderLevel: 5,
+            isPerishable: false,
+            exchangeType: 'none',
+            createdAt: new Date().toISOString(),
+          };
+        }
+        addItemToCart(createdItem, 1);
+        setRapidScanBanner({ name: createdItem.name, price: createdItem.sellPrice });
+        setTimeout(() => setRapidScanBanner(null), 2000);
+        return;
+      }
+
       setMatchedMasterProduct({
         product: masterMatch,
         barcode: code,
@@ -211,8 +254,13 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
       return;
     }
 
-    // 3. Unrecognized barcode: prompt shopkeeper to link or create
+    // 3. Unrecognized barcode: prompt shopkeeper with instant naming form (never leave as serial number)
     setUnrecognizedBarcode(code);
+    setNewQuickItemName('');
+    setNewQuickItemPrice('10');
+    setNewQuickItemBuyPrice('8');
+    setNewQuickItemCategory('बिस्कुट व नमकीन');
+    setShowAdvancedUnrecognizedOptions(false);
     setScannedMatchedItem(null);
     setMatchedMasterProduct(null);
   };
@@ -256,107 +304,208 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [stockItems]);
 
-  // Start High-Speed HTML5 Camera Scanner
-  useEffect(() => {
-    let isMounted = true;
+  // Start High-Speed HTML5 Camera Scanner with Robust Multi-Level Fallback
+  const startScanner = async () => {
+    setIsStartingCamera(true);
+    setCameraError(null);
 
-    async function initCamera() {
-      try {
-        setCameraError(null);
-
-        // Hardware accelerated BarcodeDetector when available + all common retail formats
-        const html5Qr = new Html5Qrcode(scannerContainerId, {
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.CODE_93,
-            Html5QrcodeSupportedFormats.CODABAR,
-            Html5QrcodeSupportedFormats.ITF,
-            Html5QrcodeSupportedFormats.QR_CODE,
-            Html5QrcodeSupportedFormats.DATA_MATRIX,
-          ],
-          verbose: false,
-          experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true,
-          },
-        });
-
-        html5QrCodeRef.current = html5Qr;
-
-        // Tuned for high-speed 30 FPS scanning; adaptive height for small sachets and 1D retail bars
-        const config = {
-          fps: 30,
-          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            const width = Math.max(260, Math.min(420, Math.floor(viewfinderWidth * 0.94)));
-            const height = Math.max(130, Math.min(240, Math.floor(viewfinderHeight * 0.65)));
-            return { width, height };
-          },
-          aspectRatio: 1.333333,
-          disableFlip: false,
-        };
-
-        const cameraConfig = {
-          facingMode: isFrontCamera ? 'user' : 'environment',
-          width: { ideal: 1280, min: 640 },
-          height: { ideal: 720, min: 480 },
-        };
-
-        await html5Qr.start(
-          cameraConfig,
-          config,
-          (decodedText) => {
-            if (!isMounted) return;
-            // Freeze scan intake while shopkeeper is confirming active item (in normal mode)
-            if (!rapidModeRef.current && isCardOpenRef.current) return;
-
-            const now = Date.now();
-            const clean = decodedText.trim();
-            // Prevent duplicate burst scans of the same item within 1.2s in normal mode, or 0.8s in rapid mode
-            const minInterval = rapidModeRef.current ? 800 : 1200;
-            if (clean === lastScanRef.current.code && now - lastScanRef.current.time < minInterval) {
-              return;
-            }
-            lastScanRef.current = { code: clean, time: now };
-            handleBarcodeScanned(clean);
-          },
-          () => {}
-        );
-
-        if (isMounted) {
-          setScannerActive(true);
-        }
-      } catch (err) {
-        console.warn('Camera could not be started or permission denied:', err);
-        if (isMounted) {
-          setScannerActive(false);
-          setCameraError(
-            language === 'en'
-              ? 'Camera unavailable or permission denied. You can enter barcodes manually or use a USB scanner.'
-              : language === 'pa'
-              ? 'ਕੈਮਰਾ ਉਪਲਬਧ ਨਹੀਂ ਹੈ। ਤੁਸੀਂ ਬਾਰਕੋਡ ਨੰਬਰ ਲਿਖ ਸਕਦੇ ਹੋ।'
-              : 'कैमरा उपलब्ध नहीं है या अनुमति नहीं मिली। आप बारकोड नंबर लिखकर या USB गन से स्कैन कर सकते हैं।'
-          );
-        }
-      }
+    // Stop existing scanner instance safely before re-initializing
+    if (html5QrCodeRef.current) {
+      const oldScanner = html5QrCodeRef.current;
+      html5QrCodeRef.current = null;
+      await safeStopScanner(oldScanner);
     }
 
+    try {
+      const container = document.getElementById(scannerContainerId);
+      if (!container) {
+        setIsStartingCamera(false);
+        return;
+      }
+
+      // Hardware accelerated BarcodeDetector when available + all common retail formats
+      const html5Qr = new Html5Qrcode(scannerContainerId, {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.CODE_93,
+          Html5QrcodeSupportedFormats.CODABAR,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+        ],
+        verbose: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
+      });
+
+      html5QrCodeRef.current = html5Qr;
+
+      // Tuned for high-speed 30 FPS scanning; adaptive height for small sachets and 1D retail bars
+      const config = {
+        fps: 30,
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          const width = Math.max(240, Math.min(420, Math.floor(viewfinderWidth * 0.94)));
+          const height = Math.max(120, Math.min(240, Math.floor(viewfinderHeight * 0.65)));
+          return { width, height };
+        },
+        aspectRatio: 1.333333,
+        disableFlip: false,
+      };
+
+      const handleScanSuccess = (decodedText: string) => {
+        // Freeze scan intake while shopkeeper is confirming active item (in normal mode)
+        if (!rapidModeRef.current && isCardOpenRef.current) return;
+
+        const now = Date.now();
+        const clean = decodedText.trim();
+        // Prevent duplicate burst scans of the same item within 1.2s in normal mode, or 0.8s in rapid mode
+        const minInterval = rapidModeRef.current ? 800 : 1200;
+        if (clean === lastScanRef.current.code && now - lastScanRef.current.time < minInterval) {
+          return;
+        }
+        lastScanRef.current = { code: clean, time: now };
+        handleBarcodeScanned(clean);
+      };
+
+      let started = false;
+
+      // Strategy 1: Camera facing mode without rigid min constraints (prevents OverconstrainedError)
+      try {
+        await html5Qr.start(
+          { facingMode: isFrontCamera ? 'user' : 'environment' },
+          config,
+          handleScanSuccess,
+          () => {}
+        );
+        started = true;
+      } catch (firstErr) {
+        console.warn('Camera Strategy 1 (facingMode) attempt failed:', firstErr);
+      }
+
+      // Strategy 2: Query enumerated camera hardware devices and select environment or primary camera
+      if (!started) {
+        try {
+          const devices = await Html5Qrcode.getCameras();
+          if (devices && devices.length > 0) {
+            const backCam = devices.find(
+              (d) =>
+                d.label.toLowerCase().includes('back') ||
+                d.label.toLowerCase().includes('rear') ||
+                d.label.toLowerCase().includes('environment')
+            );
+            const targetCamId = isFrontCamera ? devices[0].id : (backCam ? backCam.id : devices[0].id);
+            await html5Qr.start(targetCamId, config, handleScanSuccess, () => {});
+            started = true;
+          }
+        } catch (deviceErr) {
+          console.warn('Camera Strategy 2 (getCameras) attempt failed:', deviceErr);
+        }
+      }
+
+      // Strategy 3: User facing camera or generic video device fallback
+      if (!started) {
+        try {
+          await html5Qr.start(
+            { facingMode: 'user' },
+            config,
+            handleScanSuccess,
+            () => {}
+          );
+          started = true;
+        } catch (userErr) {
+          console.warn('Camera Strategy 3 (user facing) attempt failed:', userErr);
+        }
+      }
+
+      if (started) {
+        setScannerActive(true);
+        setCameraError(null);
+      } else {
+        throw new Error('Could not access or start any video camera.');
+      }
+    } catch (err: unknown) {
+      console.warn('Camera could not be started or permission denied:', err);
+      setScannerActive(false);
+      const errStr = String(err).toLowerCase();
+      const isDenied =
+        errStr.includes('notallowederror') ||
+        errStr.includes('permissiondenied') ||
+        errStr.includes('denied') ||
+        errStr.includes('permission');
+
+      if (isDenied) {
+        setCameraError(
+          language === 'en'
+            ? 'Camera permission was denied. Tap "Allow Camera" below to grant permission in your browser.'
+            : language === 'pa'
+            ? 'ਕੈਮਰਾ ਅਨੁਮਤੀ ਨਹੀਂ ਮਿਲੀ। ਕਿਰਪਾ ਕਰਕੇ ਹੇਠਾਂ "ਕੈਮਰਾ ਚਾਲੂ ਕਰੋ" ਬਟਨ ਦਬਾਓ।'
+            : 'कैमरा अनुमति नहीं मिली। कृपया नीचे दिए गए "कैमरा चालू करें / अनुमति दें" बटन पर टैप करें।'
+        );
+      } else {
+        setCameraError(
+          language === 'en'
+            ? 'Camera unavailable. Tap "Allow Camera" below to retry, or enter barcodes manually.'
+            : 'कैमरा शुरू नहीं हुआ। पुनः प्रयास करने के लिए नीचे "कैमरा चालू करें" दबाएं या बारकोड नंबर लिखें।'
+        );
+      }
+    } finally {
+      setIsStartingCamera(false);
+    }
+  };
+
+  // Explicit User-Gesture Permission Request Handler (Triggers native browser prompt directly on click)
+  const handleRequestPermissionAndStart = async () => {
+    setIsStartingCamera(true);
+    setCameraError(null);
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        // Native click event triggers browser permission dialog!
+        const testStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: isFrontCamera ? 'user' : 'environment' },
+        });
+        testStream.getTracks().forEach((track) => track.stop());
+      }
+    } catch (permErr) {
+      console.warn('Direct getUserMedia test notice:', permErr);
+    }
+    await startScanner();
+  };
+
+  // Safe manual stop of camera
+  const handleStopScanner = async () => {
+    if (html5QrCodeRef.current) {
+      const scanner = html5QrCodeRef.current;
+      html5QrCodeRef.current = null;
+      await safeStopScanner(scanner);
+    }
+    setScannerActive(false);
+  };
+
+  // Auto-start camera when modal mounts or camera changes
+  useEffect(() => {
+    let isMounted = true;
     const timer = setTimeout(() => {
-      initCamera();
-    }, 100);
+      if (isMounted) {
+        startScanner();
+      }
+    }, 120);
 
     return () => {
       isMounted = false;
       clearTimeout(timer);
-      if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-        html5QrCodeRef.current.stop().catch(() => {});
-        html5QrCodeRef.current.clear();
+      if (html5QrCodeRef.current) {
+        const scannerInstance = html5QrCodeRef.current;
+        html5QrCodeRef.current = null;
+        safeStopScanner(scannerInstance);
       }
     };
-  }, [isFrontCamera, language]);
+  }, [isFrontCamera]);
 
   // Toggle Torch/Flashlight
   const handleToggleTorch = async () => {
@@ -446,12 +595,84 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
     setMatchedMasterProduct(null);
   };
 
+  // Save Unrecognized Barcode with Real Item Name and Add directly to Sale Cart
+  const handleSaveQuickItemAndAddToCart = () => {
+    if (!unrecognizedBarcode) return;
+    const finalName = newQuickItemName.trim();
+    if (!finalName) {
+      alert(
+        language === 'en'
+          ? 'Please enter the item name (e.g. Parle-G, Kurkure, Salt).'
+          : 'कृपया सामान का सही नाम लिखें (उदा. पारले बिस्कुट, कुरकुरे, नमक)।'
+      );
+      return;
+    }
+
+    const sellP = Math.max(1, parseFloat(newQuickItemPrice) || 10);
+    const buyP = Math.max(0, parseFloat(newQuickItemBuyPrice) || Math.round(sellP * 0.8));
+
+    let createdItem: StockItem;
+    if (onAddMasterItemToStock) {
+      createdItem = onAddMasterItemToStock({
+        name: finalName,
+        category: newQuickItemCategory || 'बिस्कुट व नमकीन',
+        unit: 'पैकेट',
+        barcode: unrecognizedBarcode,
+        buyPrice: buyP,
+        sellPrice: sellP,
+        currentQuantity: 20,
+        reorderLevel: 5,
+        isPerishable: false,
+        exchangeType: 'none',
+      });
+    } else {
+      createdItem = {
+        id: 'item-quick-' + Date.now(),
+        name: finalName,
+        category: newQuickItemCategory || 'बिस्कुट व नमकीन',
+        unit: 'पैकेट',
+        barcode: unrecognizedBarcode,
+        buyPrice: buyP,
+        sellPrice: sellP,
+        currentQuantity: 20,
+        reorderLevel: 5,
+        isPerishable: false,
+        exchangeType: 'none',
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    // Add to cart with real name & price
+    addItemToCart(createdItem, 1);
+    setUnrecognizedBarcode(null);
+    setNewQuickItemName('');
+    playSuccessChime();
+  };
+
   // Modify quantity inside running sale basket
   const handleUpdateCartQty = (itemId: string, delta: number) => {
     setCart((prev) =>
       prev
         .map((ci) => {
           if (ci.item.id === itemId) {
+            if (ci.isLooseSold) {
+              const currentPortions = Math.max(1, Math.round(ci.lineTotal / (ci.sellPrice || 1)));
+              const newPortions = currentPortions + delta;
+              if (newPortions <= 0) return null;
+              const singlePortionKg = ci.weightGrams ? ci.weightGrams / 1000 : 0.05;
+              const newQtyKg =
+                ci.item && (ci.item.unit === 'किलो' || ci.item.unit.toLowerCase() === 'kg')
+                  ? Math.round(singlePortionKg * newPortions * 1000) / 1000
+                  : newPortions;
+
+              return {
+                ...ci,
+                quantity: newQtyKg,
+                lineTotal: newPortions * ci.sellPrice,
+                lineProfit: newPortions * (ci.sellPrice - ci.buyPrice),
+              };
+            }
+
             const newQty = ci.quantity + delta;
             if (newQty <= 0) return null;
             return {
@@ -802,13 +1023,83 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
                   </div>
                 )}
 
-                {/* Camera Error Message */}
-                {cameraError && (
-                  <div className="absolute inset-0 bg-black/85 p-4 flex flex-col items-center justify-center text-center text-white">
-                    <span className="material-symbols-outlined text-amber-400 text-3xl mb-1">
-                      videocam_off
-                    </span>
-                    <p className="text-xs text-stone-300 max-w-xs">{cameraError}</p>
+                {/* Camera Permission / Activation Overlay when scanner is inactive or has error */}
+                {(!scannerActive || cameraError) && (
+                  <div className="absolute inset-0 bg-[#0E2017]/95 backdrop-blur-xs p-4 flex flex-col items-center justify-center text-center text-white z-20">
+                    <div className="w-13 h-13 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center mb-2 shadow-inner">
+                      <span className="material-symbols-outlined text-emerald-400 text-3xl">
+                        {cameraError ? 'videocam_off' : 'photo_camera'}
+                      </span>
+                    </div>
+
+                    <h4 className="text-sm font-extrabold text-white mb-1">
+                      {language === 'en' ? 'Camera Barcode Scanner' : 'कैमरा बारकोड स्कैनर'}
+                    </h4>
+
+                    <p className="text-xs text-emerald-100/80 max-w-xs mb-3.5 leading-relaxed">
+                      {cameraError ||
+                        (language === 'en'
+                          ? 'Tap button below to start scanning. Please allow camera permission when prompted by browser.'
+                          : 'सामान का बारकोड स्कैन करने के लिए नीचे हरा बटन दबाएं और कैमरा अनुमति (Allow) दें।')}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={handleRequestPermissionAndStart}
+                      disabled={isStartingCamera}
+                      className="w-full max-w-[260px] py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-[#0E2017] font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60"
+                    >
+                      {isStartingCamera ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-[#0E2017] border-t-transparent rounded-full animate-spin" />
+                          <span>{language === 'en' ? 'Starting Camera...' : 'कैमरा चालू हो रहा है...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-lg">videocam</span>
+                          <span>
+                            {language === 'en'
+                              ? cameraError
+                                ? 'Retry / Allow Camera'
+                                : 'Enable Camera & Scan'
+                              : cameraError
+                              ? 'पुनः प्रयास / कैमरा अनुमति दें'
+                              : '📸 कैमरा चालू करें / अनुमति दें'}
+                          </span>
+                        </>
+                      )}
+                    </button>
+
+                    <div className="flex items-center gap-3 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsFrontCamera(!isFrontCamera);
+                          setTimeout(() => {
+                            handleRequestPermissionAndStart();
+                          }, 60);
+                        }}
+                        className="text-[11px] text-emerald-300/80 hover:text-white flex items-center gap-1 underline underline-offset-2"
+                      >
+                        <span className="material-symbols-outlined text-sm">flip_camera_android</span>
+                        <span>
+                          {isFrontCamera
+                            ? (language === 'en' ? 'Switch to Back Camera' : 'बैक कैमरा चुनें')
+                            : (language === 'en' ? 'Switch to Front Camera' : 'फ्रंट कैमरा चुनें')}
+                        </span>
+                      </button>
+                    </div>
+
+                    {cameraError && (
+                      <div className="mt-3 p-2 bg-amber-500/20 border border-amber-400/40 rounded-lg max-w-xs text-[10px] text-amber-200 text-left flex items-start gap-1.5">
+                        <span className="material-symbols-outlined text-xs text-amber-300 shrink-0 mt-0.5">info</span>
+                        <span>
+                          {language === 'en'
+                            ? 'If camera is blocked: Click the lock 🔒 or camera icon in browser address bar and set Camera to "Allow".'
+                            : 'यदि कैमरा ब्लॉक है: ब्राउज़र के एड्रेस बार में 🔒 या कैमरा आइकन पर टैप करें और Camera को "Allow" करें।'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -847,6 +1138,33 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
                   {language === 'en' ? 'Check' : 'चेक करें'}
                 </button>
               </div>
+
+              {/* QUICK OPEN LOOSE NAMKEEN (50g=₹10) BUTTON */}
+              <button
+                type="button"
+                onClick={() => {
+                  setLooseWeightTargetItem(undefined);
+                  setShowLooseWeightModal(true);
+                }}
+                className="w-full px-3.5 py-2.5 bg-gradient-to-r from-[#E7F0EA] via-[#F4F9F6] to-white border border-[#2F6B4F]/40 rounded-2xl flex items-center justify-between text-left hover:border-[#2F6B4F] shadow-2xs transition-all active:scale-98"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#2F6B4F] text-white flex items-center justify-center text-base font-bold shadow-2xs">
+                    ⚖️
+                  </div>
+                  <div>
+                    <span className="text-xs font-extrabold text-[#1E4632] block">
+                      {language === 'en' ? 'Sell Open Loose Namkeen (50g = ₹10)' : '⚖️ खुली नमकीन / वजन से बेचें (50g = ₹10)'}
+                    </span>
+                    <span className="text-[10px] text-[#4A5D52]">
+                      {language === 'en' ? 'Deducts weight from big bulk pack' : 'बड़ी बोरी या पैकेट से वजन अनुसार स्टॉक घटेगा'}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-xs font-extrabold bg-white text-[#2F6B4F] px-2.5 py-1 rounded-lg border border-[#2F6B4F]/30 shadow-2xs">
+                  {language === 'en' ? '+ Weigh' : '+ तौलें'}
+                </span>
+              </button>
 
               {/* QUICK LOOSE ITEMS / UNBARCODED ACCORDION BUTTON */}
               <div className="bg-white rounded-2xl border border-[#E4DFD2] overflow-hidden shadow-2xs">
@@ -1224,80 +1542,212 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
                 </div>
               )}
 
-              {/* UNRECOGNIZED BARCODE CARD (LINK OR CREATE) */}
+              {/* UNRECOGNIZED BARCODE CARD: INSTANT REAL ITEM NAMING (NEVER ADDS SERIAL NUMBER) */}
               {unrecognizedBarcode && (
-                <div className="bg-[#FFFBEB] border-2 border-[#F59E0B] rounded-2xl p-4 shadow-lg animate-scale-up space-y-3">
-                  <div className="flex items-start gap-2.5">
-                    <span className="material-symbols-outlined text-[#F59E0B] text-2xl">help</span>
-                    <div>
-                      <h4 className="text-sm font-bold text-[#92400E]">
-                        {language === 'en' ? 'Unrecognized Barcode' : 'यह बारकोड दर्ज नहीं है'}
-                      </h4>
-                      <p className="text-xs text-[#B45309] font-mono mt-0.5">
-                        {unrecognizedBarcode}
-                      </p>
+                <div className="bg-[#FFFBEB] border-2 border-emerald-500 rounded-2xl p-4 shadow-xl animate-scale-up space-y-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-800 flex items-center justify-center font-bold">
+                        <span className="material-symbols-outlined text-lg">edit_note</span>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-extrabold text-[#16291E]">
+                          {language === 'en' ? 'New Item Scanned — Enter Details' : 'नया सामान स्कैन हुआ — नाम व भाव लिखें'}
+                        </h4>
+                        <p className="text-[11px] text-[#2F6B4F] font-mono mt-0.5 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">barcode</span>
+                          <span>{unrecognizedBarcode}</span>
+                        </p>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Option 1: Link to existing stock item */}
-                  <div className="bg-white p-3 rounded-xl border border-[#F59E0B]/30 space-y-2">
-                    <label className="text-[11px] font-bold text-[#16291E] block">
-                      {language === 'en'
-                        ? '1. Link to an existing stock item'
-                        : '1. दुकान में मौजूद किसी सामान से जोड़ें'}
-                    </label>
-                    <select
-                      value={linkTargetItemId}
-                      onChange={(e) => setLinkTargetItemId(e.target.value)}
-                      className="w-full text-xs p-2 rounded-lg border border-[#E4DFD2] bg-[#FAF7F0] text-[#16291E]"
-                    >
-                      <option value="">
-                        {language === 'en' ? '-- Select Existing Item --' : '-- मौजूदा सामान चुनें --'}
-                      </option>
-                      {stockItems.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} ({item.category} • ₹{item.sellPrice})
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      type="button"
-                      disabled={!linkTargetItemId}
-                      onClick={handleLinkBarcode}
-                      className="w-full py-2 bg-[#2F6B4F] disabled:bg-gray-300 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <span className="material-symbols-outlined text-sm">link</span>
-                      <span>
-                        {language === 'en' ? 'Save Link & Add to Bill' : 'लिंक सुरक्षित करें और बिल में जोड़ें'}
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Option 2: Add as new stock item */}
-                  <div className="flex items-center justify-between pt-1">
                     <button
                       type="button"
                       onClick={() => setUnrecognizedBarcode(null)}
-                      className="text-xs text-[#6B7C72] hover:text-[#16291E]"
+                      className="text-stone-400 hover:text-stone-700 p-1"
                     >
-                      {language === 'en' ? 'Cancel' : 'रद्द करें'}
+                      <span className="material-symbols-outlined text-base">close</span>
                     </button>
+                  </div>
+
+                  {/* Primary Fast Naming Form: Sets actual item name instead of serial number */}
+                  <div className="bg-white p-3.5 rounded-xl border border-emerald-500/30 shadow-xs space-y-3">
+                    {/* Item Name Input */}
+                    <div>
+                      <label className="text-[11px] font-black text-[#16291E] flex items-center justify-between mb-1">
+                        <span>{language === 'en' ? 'Item Name (Required)' : 'सामान का असली नाम (अनिवार्य)'}</span>
+                        <span className="text-[10px] text-emerald-700 font-normal">
+                          {language === 'en' ? 'e.g. Parle-G, Namkeen' : 'उदा. पारले बिस्कुट, नमकीन'}
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        autoFocus
+                        value={newQuickItemName}
+                        onChange={(e) => setNewQuickItemName(e.target.value)}
+                        placeholder={
+                          language === 'en'
+                            ? 'Type item name (e.g. Kurkure ₹10)...'
+                            : 'सामान का नाम लिखें (जैसे: पारले-जी, कुरकुरे ₹10)...'
+                        }
+                        className="w-full text-xs font-semibold px-3 py-2 rounded-lg border border-[#E4DFD2] focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none text-[#16291E] bg-[#FAF7F0]"
+                      />
+
+                      {/* Quick 1-tap Name Suggestion Chips */}
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {[
+                          'पारले-जी',
+                          'नमकीन पैकेट',
+                          'कुरकुरे',
+                          'लेज़ चिप्स',
+                          'लाइफबॉय साबुन',
+                          'घड़ी सर्फ',
+                          'मैगी',
+                          'मसाला पैकेट',
+                          'कोल्ड ड्रिंक',
+                          'चॉकलेट',
+                        ].map((sug) => (
+                          <button
+                            key={sug}
+                            type="button"
+                            onClick={() => setNewQuickItemName(sug)}
+                            className="px-2 py-0.5 bg-[#FAF7F0] hover:bg-emerald-50 text-[#2F6B4F] border border-[#E4DFD2] rounded-md text-[10px] font-medium transition-colors"
+                          >
+                            + {sug}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Price & Category Grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px] font-bold text-[#16291E] block mb-1">
+                          {language === 'en' ? 'Selling Price (₹)' : 'बिक्री मूल्य (₹ भाव)'}
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1.5 text-xs text-stone-500 font-bold">₹</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={newQuickItemPrice}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setNewQuickItemPrice(val);
+                              const num = parseFloat(val);
+                              if (!isNaN(num)) {
+                                setNewQuickItemBuyPrice(String(Math.round(num * 0.8)));
+                              }
+                            }}
+                            className="w-full text-xs font-bold pl-6 pr-2 py-1.5 rounded-lg border border-[#E4DFD2] bg-[#FAF7F0] text-[#16291E] outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-[#16291E] block mb-1">
+                          {language === 'en' ? 'Category' : 'श्रेणी'}
+                        </label>
+                        <select
+                          value={newQuickItemCategory}
+                          onChange={(e) => setNewQuickItemCategory(e.target.value)}
+                          className="w-full text-xs py-1.5 px-2 rounded-lg border border-[#E4DFD2] bg-[#FAF7F0] text-[#16291E] outline-none"
+                        >
+                          <option value="बिस्कुट व नमकीन">बिस्कुट व नमकीन</option>
+                          <option value="किराना व राशन">किराना व राशन</option>
+                          <option value="स्नैक्स व चिप्स">स्नैक्स व चिप्स</option>
+                          <option value="डेयरी व दूध">डेयरी व दूध</option>
+                          <option value="पेय पदार्थ">पेय पदार्थ</option>
+                          <option value="साफ-सफाई">साफ-सफाई</option>
+                          <option value="पर्सनल केयर">पर्सनल केयर</option>
+                          <option value="अन्य">अन्य</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Big Action Button: Add Item with real name and price directly into cart! */}
                     <button
                       type="button"
-                      onClick={() => {
-                        const code = unrecognizedBarcode;
-                        setUnrecognizedBarcode(null);
-                        const addFn = onAddNewWithBarcode || onAddNewItemWithBarcode;
-                        if (addFn && code) addFn(code);
-                      }}
-                      className="text-xs font-bold text-[#2F6B4F] hover:underline flex items-center gap-1"
+                      onClick={handleSaveQuickItemAndAddToCart}
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs rounded-xl shadow-md transition-transform active:scale-95 flex items-center justify-center gap-1.5"
                     >
-                      <span className="material-symbols-outlined text-sm">add_circle</span>
+                      <span className="material-symbols-outlined text-base">add_shopping_cart</span>
                       <span>
-                        {language === 'en' ? '2. Add as New Item' : '2. नया सामान बनाकर जोड़ें'}
+                        {language === 'en'
+                          ? `Add "${newQuickItemName.trim() || 'Item'}" to Stock & Bill`
+                          : `"${newQuickItemName.trim() || 'सामान'}" स्टॉक व बिल में जोड़ें`}
                       </span>
                     </button>
+                  </div>
+
+                  {/* Expandable Advanced Options (Link to Existing or Full Form) */}
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedUnrecognizedOptions(!showAdvancedUnrecognizedOptions)}
+                      className="text-[11px] font-semibold text-stone-500 hover:text-stone-800 flex items-center gap-1 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-xs">
+                        {showAdvancedUnrecognizedOptions ? 'expand_less' : 'tune'}
+                      </span>
+                      <span>
+                        {language === 'en'
+                          ? showAdvancedUnrecognizedOptions
+                            ? 'Hide other options'
+                            : 'Or link to existing item in shop...'
+                          : showAdvancedUnrecognizedOptions
+                          ? 'अन्य विकल्प छुपाएं'
+                          : 'या दुकान के किसी पुराने सामान से जोड़ें...'}
+                      </span>
+                    </button>
+
+                    {showAdvancedUnrecognizedOptions && (
+                      <div className="mt-2.5 p-2.5 bg-white rounded-xl border border-stone-200 space-y-2.5 text-xs animate-scale-up">
+                        <div>
+                          <label className="text-[11px] font-bold text-[#16291E] block mb-1">
+                            {language === 'en' ? 'Link to existing shop item:' : 'मौजूदा सामान चुनें:'}
+                          </label>
+                          <select
+                            value={linkTargetItemId}
+                            onChange={(e) => setLinkTargetItemId(e.target.value)}
+                            className="w-full text-xs p-2 rounded-lg border border-[#E4DFD2] bg-[#FAF7F0] text-[#16291E]"
+                          >
+                            <option value="">
+                              {language === 'en' ? '-- Select Existing Item --' : '-- मौजूदा सामान चुनें --'}
+                            </option>
+                            {stockItems.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name} ({item.category} • ₹{item.sellPrice})
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!linkTargetItemId}
+                            onClick={handleLinkBarcode}
+                            className="w-full mt-2 py-1.5 bg-[#2F6B4F] disabled:bg-gray-300 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <span className="material-symbols-outlined text-sm">link</span>
+                            <span>{language === 'en' ? 'Save Link & Add to Bill' : 'लिंक करें और बिल में जोड़ें'}</span>
+                          </button>
+                        </div>
+
+                        <div className="border-t border-stone-200 pt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const code = unrecognizedBarcode;
+                              setUnrecognizedBarcode(null);
+                              const addFn = onAddNewWithBarcode || onAddNewItemWithBarcode;
+                              if (addFn && code) addFn(code);
+                            }}
+                            className="text-xs font-bold text-[#2F6B4F] hover:underline flex items-center gap-1"
+                          >
+                            <span className="material-symbols-outlined text-sm">open_in_new</span>
+                            <span>{language === 'en' ? 'Open Full Add Item Form' : 'विस्तृत फॉर्म में खोलें'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1340,22 +1790,31 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
                         className="flex items-center justify-between bg-[#FAF7F0] p-2.5 rounded-xl border border-[#E4DFD2]"
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <h5 className="text-xs font-bold text-[#16291E] truncate">
                               {cartItem.item.name}
                             </h5>
+                            {cartItem.weightDisplay && (
+                              <span className="text-[10px] font-extrabold bg-[#2F6B4F]/15 text-[#1E4632] px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                                <span className="material-symbols-outlined text-[10px]">scale</span>
+                                <span>{cartItem.weightDisplay}</span>
+                              </span>
+                            )}
                             {cartItem.item.barcode ? (
                               <span className="text-[9px] bg-[#2F6B4F]/10 text-[#2F6B4F] px-1.5 py-0.2 rounded font-mono font-bold shrink-0">
                                 ❚❚█
                               </span>
-                            ) : (
+                            ) : !cartItem.weightDisplay ? (
                               <span className="text-[9px] bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded font-semibold shrink-0">
                                 {language === 'en' ? 'Loose' : 'खुला'}
                               </span>
-                            )}
+                            ) : null}
                           </div>
                           <span className="text-[10px] text-[#6B7C72] block mt-0.5">
-                            ₹{cartItem.sellPrice} × {cartItem.quantity} {cartItem.item.unit} = <strong className="text-[#16291E]">₹{cartItem.lineTotal}</strong>{' '}
+                            {cartItem.weightDisplay
+                              ? `दर: ₹${cartItem.sellPrice} • कुल: `
+                              : `₹${cartItem.sellPrice} × ${cartItem.quantity} ${cartItem.item.unit} = `}
+                            <strong className="text-[#16291E]">₹{cartItem.lineTotal}</strong>{' '}
                             <span className="text-[#2F6B4F] font-bold">
                               (+₹{cartItem.lineProfit} मुनाफ़ा)
                             </span>
@@ -1372,7 +1831,9 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
                             -
                           </button>
                           <span className="text-xs font-black text-[#16291E] min-w-[20px] text-center">
-                            {cartItem.quantity}
+                            {cartItem.isLooseSold
+                              ? Math.max(1, Math.round(cartItem.lineTotal / (cartItem.sellPrice || 1)))
+                              : cartItem.quantity}
                           </span>
                           <button
                             type="button"
@@ -1424,6 +1885,43 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
             </>
           )}
         </div>
+
+        {/* Open Loose Namkeen & Weight Selling Modal */}
+        {showLooseWeightModal && (
+          <LooseWeightSellModal
+            language={language}
+            stockItems={stockItems}
+            preselectedItem={looseWeightTargetItem}
+            onAddToCart={(newCartItem) => {
+              setCart((prev) => {
+                const existingIdx = prev.findIndex((ci) => ci.item.id === newCartItem.item.id);
+                if (existingIdx >= 0) {
+                  const updated = [...prev];
+                  const ex = updated[existingIdx];
+                  const mergedQty = Math.round(((ex.quantity || 0) + (newCartItem.quantity || 0)) * 1000) / 1000;
+                  const mergedTotal = (ex.lineTotal || 0) + newCartItem.lineTotal;
+                  const mergedProfit = (ex.lineProfit || 0) + newCartItem.lineProfit;
+                  const totalGrams = (ex.weightGrams || 0) + (newCartItem.weightGrams || 0);
+                  const display = totalGrams >= 1000 ? `${(totalGrams / 1000).toFixed(2)} कि.ग्रा.` : `${totalGrams} ग्रा.`;
+                  updated[existingIdx] = {
+                    ...ex,
+                    quantity: mergedQty,
+                    lineTotal: mergedTotal,
+                    lineProfit: mergedProfit,
+                    weightGrams: totalGrams,
+                    weightDisplay: display,
+                    isLooseSold: true,
+                  };
+                  return updated;
+                }
+                return [...prev, newCartItem];
+              });
+              setShowLooseWeightModal(false);
+              playScanBeep();
+            }}
+            onClose={() => setShowLooseWeightModal(false)}
+          />
+        )}
       </div>
     </div>
   );

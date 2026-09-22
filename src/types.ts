@@ -10,9 +10,55 @@ export interface UserProfile {
   storeType: StoreType;
   phone: string;
   createdAt: string;
+  registeredAt?: string;
+  lastLoginAt?: string;
+  lastLoginProvider?: string;
+  loginCount?: number;
+  email?: string;
+  photoURL?: string;
+  logoUrl?: string;
+}
+
+export interface UserLoginRecord {
+  id: string;
+  type?: 'register' | 'login';
+  timestamp: number;
+  isoTime: string;
+  provider: string;
+  email: string;
+  userAgent?: string;
+  status?: string;
 }
 
 export type ExchangeType = 'exchangeable' | 'loss' | 'none';
+
+export type SupplierChannel =
+  | 'ration_mandi'
+  | 'tobacco_agency'
+  | 'daily_salesman'
+  | 'dairy_fresh'
+  | 'fmcg_distributor'
+  | 'local_mandi'
+  | 'other';
+
+export type SupplierOrderMode =
+  | 'slip'
+  | 'daily_salesman'
+  | 'weekly_salesman'
+  | 'direct_call';
+
+export interface WholesalerSupplier {
+  id: string;
+  name: string;
+  channel: SupplierChannel;
+  orderMode: SupplierOrderMode;
+  phone?: string;
+  category: string;
+  timingOrSchedule?: string; // e.g. "Daily 10:30 AM", "दैनिक सुबह 10:30"
+  notes?: string;
+  lastOrderDate?: string;
+  isCustom?: boolean;
+}
 
 export interface StockItem {
   id: string;
@@ -28,8 +74,14 @@ export interface StockItem {
   isPerishable: boolean; // Spoils quickly?
   exchangeType: ExchangeType; // Exchangeable with supplier vs pure loss
   supplierName?: string;
+  supplierChannel?: SupplierChannel; // 'ration_mandi' | 'tobacco_agency' | 'daily_salesman' | 'dairy_fresh' | 'other'
+  supplierOrderMode?: SupplierOrderMode; // 'slip' (send slip to mandi/agency) vs 'daily_salesman' (comes to shop daily)
   salesHistory?: number[]; // Daily sales counts over last 7 days for smart reorder
   imageUrl?: string;
+  isLooseItem?: boolean; // Broken down from bulk packet/sack and sold by weight (e.g. namkeen, bhujia, dal)
+  bulkPackWeightKg?: number; // e.g. 5 kg wholesale packet
+  looseRatePer50g?: number; // e.g. ₹10 per 50 grams
+  looseRatePer100g?: number; // e.g. ₹20 per 100 grams
   createdAt: string;
   updatedAt?: string;
 }
@@ -131,6 +183,8 @@ export interface ScannedBillItem {
   existingBuyRate?: number;
   existingSellRate?: number;
   rateComparison?: 'fair' | 'cheaper' | 'costlier' | 'check';
+  suggestedSellRate?: number;
+  matchedMasterName?: string;
 }
 
 export interface ScannedBillDraft {
@@ -144,3 +198,18 @@ export interface ScannedBillDraft {
   grandTotal?: number;
   paymentMode: 'cash' | 'credit';
 }
+
+export interface CartItem {
+  item: StockItem;
+  quantity: number;
+  sellPrice: number;
+  buyPrice: number;
+  lineTotal: number;
+  lineProfit: number;
+  customName?: string;
+  isCustomItem?: boolean;
+  weightGrams?: number;
+  weightDisplay?: string;
+  isLooseSold?: boolean;
+}
+

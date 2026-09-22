@@ -1,4 +1,10 @@
 import { StockItem } from '../types';
+import {
+  KaryanaMasterItem,
+  searchKaryanaMaster,
+  KARYANA_MASTER_ITEMS,
+} from '../data/karyanaMasterCatalog';
+import { searchStationeryMaster } from '../data/stationeryMasterCatalog';
 
 // Normalized translation/synonym stems for Hindi/English/Hinglish
 const SYNONYM_MAP: Record<string, string[]> = {
@@ -238,20 +244,257 @@ export function inferCategory(name: string): string {
     return 'साबुन व डिटर्जेंट';
   }
 
-  // Stationery / कॉपियाँ व रजिस्टर
+  // 1. पेन, पेंसिल व सुधार सामग्री
   if (
     lower.includes('pen') ||
     lower.includes('पेन') ||
+    lower.includes('ballpoint') ||
+    lower.includes('likho') ||
+    lower.includes('fenko') ||
+    lower.includes('trimax') ||
+    lower.includes('pilot') ||
+    lower.includes('siyahi') ||
+    lower.includes('स्याही') ||
+    lower.includes('fountain pen') ||
+    lower.includes('refill') ||
+    lower.includes('रीफिल') ||
     lower.includes('pencil') ||
     lower.includes('पेंसिल') ||
-    lower.includes('register') ||
-    lower.includes('रजिस्टर') ||
+    lower.includes('kacchi pencil') ||
+    lower.includes('clutch') ||
+    lower.includes('tuk-tuk') ||
+    lower.includes('lead') ||
+    lower.includes('sikka') ||
+    lower.includes('सिक्का') ||
+    lower.includes('eraser') ||
+    lower.includes('rubber') ||
+    lower.includes('रबर') ||
+    lower.includes('sharpener') ||
+    lower.includes('ghadni') ||
+    lower.includes('chhillak') ||
+    lower.includes('शार्पनर') ||
+    lower.includes('घड़नी') ||
+    lower.includes('छिल्लक') ||
+    lower.includes('whitener') ||
+    lower.includes('व्हाइटनर') ||
+    lower.includes('correction') ||
+    lower.includes('marker') ||
+    lower.includes('मार्कर') ||
+    lower.includes('highlighter') ||
+    lower.includes('हाइलाइटर')
+  ) {
+    return 'पेन, पेंसिल व सुधार सामग्री';
+  }
+
+  // 2. कॉपियाँ, रजिस्टर व पेपर
+  if (
     lower.includes('copy') ||
     lower.includes('कॉपी') ||
-    lower.includes('notebook')
+    lower.includes('notebook') ||
+    lower.includes('नोटबुक') ||
+    lower.includes('register') ||
+    lower.includes('रजिस्टर') ||
+    lower.includes('long book') ||
+    lower.includes('bahi-khata') ||
+    lower.includes('khata') ||
+    lower.includes('bahi') ||
+    lower.includes('बही') ||
+    lower.includes('hisab') ||
+    lower.includes('practical') ||
+    lower.includes('drawing') ||
+    lower.includes('ड्राइंग') ||
+    lower.includes('sketch copy') ||
+    lower.includes('a4') ||
+    lower.includes('rim') ||
+    lower.includes('रीम') ||
+    lower.includes('ream') ||
+    lower.includes('assignment') ||
+    lower.includes('test sheet') ||
+    lower.includes('graph') ||
+    lower.includes('ग्राफ') ||
+    lower.includes('carbon') ||
+    lower.includes('कार्बन') ||
+    lower.includes('chart paper') ||
+    lower.includes('चार्ट') ||
+    lower.includes('tracing') ||
+    lower.includes('glaze') ||
+    lower.includes('crepe') ||
+    lower.includes('handmade')
   ) {
-    return 'कॉपियाँ व रजिस्टर';
+    return 'कॉपियाँ, रजिस्टर व पेपर';
+  }
+
+  // 3. ज्योमेट्री बॉक्स व स्केल
+  if (
+    lower.includes('geometry') ||
+    lower.includes('ज्योमेट्री') ||
+    lower.includes('compass') ||
+    lower.includes('prakar') ||
+    lower.includes('परकार') ||
+    lower.includes('divider') ||
+    lower.includes('डिवाइडर') ||
+    lower.includes('protractor') ||
+    lower.includes('chanda') ||
+    lower.includes('चांदा') ||
+    lower.includes('set square') ||
+    lower.includes('tikona') ||
+    lower.includes('तिकोना') ||
+    lower.includes('scale') ||
+    lower.includes('स्केल') ||
+    lower.includes('futti') ||
+    lower.includes('फुट्टी') ||
+    lower.includes('futta') ||
+    lower.includes('फुट्टा') ||
+    lower.includes('ruler')
+  ) {
+    return 'ज्योमेट्री बॉक्स व स्केल';
+  }
+
+  // 4. रंग, पेंट व आर्ट क्राफ्ट
+  if (
+    lower.includes('crayon') ||
+    lower.includes('क्रेयॉन') ||
+    lower.includes('mom wale') ||
+    lower.includes('oil pastel') ||
+    lower.includes('pastel') ||
+    lower.includes('पेस्टल') ||
+    lower.includes('color pencil') ||
+    lower.includes('sketch pen') ||
+    lower.includes('स्केच') ||
+    lower.includes('poster color') ||
+    lower.includes('पोस्टर') ||
+    lower.includes('water color') ||
+    lower.includes('paint') ||
+    lower.includes('brush') ||
+    lower.includes('kuchi') ||
+    lower.includes('कूची') ||
+    lower.includes('palette') ||
+    lower.includes('पैलेट')
+  ) {
+    return 'रंग, पेंट व आर्ट क्राफ्ट';
+  }
+
+  // 5. गोंद, टेप व कैंची
+  if (
+    lower.includes('fevicol') ||
+    lower.includes('फेविकोल') ||
+    lower.includes('fevikwik') ||
+    lower.includes('फेविक्विक') ||
+    lower.includes('fevistik') ||
+    lower.includes('फेविस्टिक') ||
+    lower.includes('glue') ||
+    lower.includes('gond') ||
+    lower.includes('गोंद') ||
+    lower.includes('gum') ||
+    lower.includes('tape') ||
+    lower.includes('टेप') ||
+    lower.includes('scissors') ||
+    lower.includes('kainchi') ||
+    lower.includes('कैंची') ||
+    lower.includes('cutter') ||
+    lower.includes('कटर')
+  ) {
+    return 'गोंद, टेप व कैंची';
+  }
+
+  // 6. फाइल, फोल्डर व ऑफिस सामान
+  if (
+    lower.includes('file') ||
+    lower.includes('फाइल') ||
+    lower.includes('folder') ||
+    lower.includes('फोल्डर') ||
+    lower.includes('clear book') ||
+    lower.includes('stapler') ||
+    lower.includes('स्टेपलर') ||
+    lower.includes('stepney') ||
+    lower.includes('staple pin') ||
+    lower.includes('punching') ||
+    lower.includes('पंचिंग') ||
+    lower.includes('paper clip') ||
+    lower.includes('all-pin') ||
+    lower.includes('binder clip') ||
+    lower.includes('rubber band') ||
+    lower.includes('chhalla') ||
+    lower.includes('ছल्ला') ||
+    lower.includes('sticky note') ||
+    lower.includes('post-it') ||
+    lower.includes('stamp pad') ||
+    lower.includes('angutha')
+  ) {
+    return 'फाइल, फोल्डर व ऑफिस सामान';
+  }
+
+  // Check stationery master catalog match first
+  const statMatches = searchStationeryMaster(name, 1);
+  if (statMatches.length > 0) {
+    const topStat = statMatches[0];
+    const topClean = normalizeWord(topStat.name);
+    const inputClean = normalizeWord(name);
+    if (topClean.includes(inputClean) || inputClean.includes(topClean) || topStat.nameEn.toLowerCase().includes(inputClean)) {
+      return topStat.category;
+    }
+  }
+
+  // Check exact/high confidence match from master grocery catalog
+  const masterMatches = searchKaryanaMaster(name, 1);
+  if (masterMatches.length > 0) {
+    const top = masterMatches[0];
+    const topClean = normalizeWord(top.name);
+    const inputClean = normalizeWord(name);
+    if (topClean.includes(inputClean) || inputClean.includes(topClean) || top.nameEn.toLowerCase().includes(inputClean)) {
+      return top.category;
+    }
   }
 
   return 'जनरल सामान';
+}
+
+/**
+ * Matches a scanned OCR bill line name against Master Catalogs (Stationery & Karyana)
+ */
+export function matchMasterKaryanaItem(scannedName: string): KaryanaMasterItem | undefined {
+  if (!scannedName || scannedName.trim().length < 2) return undefined;
+
+  // 1. Check Stationery Master first
+  const statResults = searchStationeryMaster(scannedName, 3);
+  const cleanScanned = normalizeWord(scannedName);
+
+  for (const item of statResults) {
+    const cleanItemName = normalizeWord(item.name);
+    const cleanItemEn = normalizeWord(item.nameEn);
+
+    if (cleanItemName === cleanScanned || cleanItemEn === cleanScanned) {
+      return item;
+    }
+    if (cleanScanned.length > 3 && (cleanItemName.includes(cleanScanned) || cleanItemEn.includes(cleanScanned))) {
+      return item;
+    }
+    if (cleanItemName.length > 3 && cleanScanned.includes(cleanItemName)) {
+      return item;
+    }
+  }
+
+  // 2. Check Karyana Master
+  const results = searchKaryanaMaster(scannedName, 3);
+  if (results.length === 0) {
+    return statResults[0];
+  }
+
+  // Check if first result is a strong match
+  for (const item of results) {
+    const cleanItemName = normalizeWord(item.name);
+    const cleanItemEn = normalizeWord(item.nameEn);
+
+    if (cleanItemName === cleanScanned || cleanItemEn === cleanScanned) {
+      return item;
+    }
+    if (cleanScanned.length > 3 && (cleanItemName.includes(cleanScanned) || cleanItemEn.includes(cleanScanned))) {
+      return item;
+    }
+    if (cleanItemName.length > 3 && cleanScanned.includes(cleanItemName)) {
+      return item;
+    }
+  }
+
+  return statResults[0] || results[0];
 }

@@ -116,18 +116,6 @@ export const KrowWordmark: React.FC<KrowWordmarkProps> = ({
           </filter>
         </defs>
 
-        {/* Left Decorative Sparkle Rays ˗ˏˋ */}
-        {showSparkles && (
-          <g stroke={sparkleColor} strokeWidth="2.8" strokeLinecap="round" opacity="0.85">
-            {/* Top Ray */}
-            <line x1="16" y1="28" x2="26" y2="33" />
-            {/* Middle Ray */}
-            <line x1="12" y1="41" x2="24" y2="41" />
-            {/* Bottom Ray */}
-            <line x1="18" y1="54" x2="27" y2="49" />
-          </g>
-        )}
-
         {/* Brand Name Text: Krōw */}
         <g filter="url(#krowSoftGlow)">
           {/* Letter 'K' */}
@@ -195,15 +183,6 @@ export const KrowWordmark: React.FC<KrowWordmarkProps> = ({
             strokeLinejoin="round"
           />
         </g>
-
-        {/* Right Decorative Sparkle Rays ˎˊ˗ (Hero/Large mode) */}
-        {showSparkles && (size === 'lg' || size === 'xl' || size === 'hero') && (
-          <g stroke={sparkleColor} strokeWidth="2.8" strokeLinecap="round" opacity="0.85">
-            <line x1="228" y1="33" x2="238" y2="28" />
-            <line x1="230" y1="41" x2="242" y2="41" />
-            <line x1="227" y1="49" x2="236" y2="54" />
-          </g>
-        )}
       </svg>
 
       {showSubtitle && (
@@ -360,13 +339,5 @@ export const KiranaStoreIllustration: React.FC<KiranaStoreIllustrationProps> = (
       <path d="M13 10C20 9 23 3 17 2C13 6 13 9 13 10Z" fill="#84C497" stroke="#1E4632" strokeWidth="1.4" />
       <path d="M13 19C19 18 23 13 18 12C15 16 14 18 13 19Z" fill="#3B8B5B" stroke="#1E4632" strokeWidth="1.4" />
     </g>
-
-    {/* Floating Friendly Sparkle / Heart Accent */}
-    <path
-      d="M214 98C214 94 219 90 223 94C227 90 232 94 232 98C232 104 223 110 223 110C223 110 214 104 214 98Z"
-      fill="#E68A80"
-      stroke="#1E4632"
-      strokeWidth="1.2"
-    />
   </svg>
 );

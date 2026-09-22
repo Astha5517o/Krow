@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { User } from 'firebase/auth';
 import { UserProfile, Language } from '../types';
 import { translations } from '../translations';
 import { AppLogo } from './AppLogo';
@@ -6,20 +7,26 @@ import { getStoreConfig } from '../data/storeTypes';
 
 interface HeaderProps {
   profile: UserProfile;
+  currentUser?: User | null;
+  isSyncing?: boolean;
   onLanguageChange: (lang: Language) => void;
   onOpenProfile: () => void;
   onOpenStoreSelect: () => void;
   onOpenShareStock?: () => void;
   onOpenWelcome?: () => void;
+  onOpenAuth?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   profile,
+  currentUser,
+  isSyncing = false,
   onLanguageChange,
   onOpenProfile,
   onOpenStoreSelect,
   onOpenShareStock,
   onOpenWelcome,
+  onOpenAuth,
 }) => {
   const t = translations[profile.language];
   const [showLangMenu, setShowLangMenu] = useState(false);
@@ -40,18 +47,27 @@ export const Header: React.FC<HeaderProps> = ({
           <AppLogo
             size="sm"
             showText={true}
-            subtitle={profile.language === 'hi' ? 'सरल साधन • व्यापार' : profile.language === 'pa' ? 'ਸਧਾਰਨ ਸਾਧਨ • ਵਪਾਰ' : 'Simple tools'}
             onClick={onOpenWelcome}
           />
 
           <button
             onClick={onOpenStoreSelect}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FAF7F0] border border-[#E4DFD2] hover:bg-[#E7F0EA] transition-colors min-w-0"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-[#E4DFD2] hover:bg-[#E7F0EA] transition-colors min-w-0 shadow-2xs"
             type="button"
             title={t[storeConfig.titleKey]}
           >
-            <span className="text-xs flex-shrink-0">{storeConfig.emoji}</span>
-            <span className="font-bold text-xs sm:text-sm text-[#262421] truncate max-w-[90px] sm:max-w-[120px]">
+            {profile.logoUrl ? (
+              <img
+                src={profile.logoUrl}
+                alt="Shop Logo"
+                className="w-4 h-4 rounded-full object-cover flex-shrink-0 border border-[#E4DFD2]"
+              />
+            ) : (
+              <span className="material-symbols-outlined text-[15px] text-[#2F6B4F] flex-shrink-0">
+                {storeConfig.icon}
+              </span>
+            )}
+            <span className="font-bold text-xs sm:text-sm text-[#262421] truncate max-w-[90px] sm:max-w-[130px]">
               {profile.shopName || t[storeConfig.titleKey]}
             </span>
             <span className="material-symbols-outlined text-[#726C60] text-[16px]">
@@ -108,13 +124,44 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
+          {!currentUser && onOpenAuth && (
+            <button
+              id="header-open-auth-btn"
+              onClick={onOpenAuth}
+              className="h-9 px-2.5 rounded-full bg-[#E7F0EA] border border-[#2F6B4F]/40 hover:bg-[#d5e7da] text-[#1E4632] flex items-center gap-1 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+              title="डेटाबेस बैकअप व लॉगिन"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[17px] text-[#2F6B4F]">cloud_sync</span>
+              <span className="text-[11px] font-bold">लॉगिन</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenProfile}
-            className="w-9 h-9 rounded-full bg-[#1E4632] text-[#FAF7F0] flex items-center justify-center shadow-xs active:scale-95 transition-transform"
+            className="w-9 h-9 rounded-full bg-[#1E4632] text-[#FAF7F0] flex items-center justify-center shadow-xs active:scale-95 transition-transform relative overflow-hidden"
             aria-label={t.profileTitle}
             type="button"
+            title={currentUser ? `${currentUser.email || 'Google User'} • क्लाउड डेटाबेस सिंक` : t.profileTitle}
           >
-            <span className="material-symbols-outlined text-[20px]">person</span>
+            {currentUser?.photoURL ? (
+              <img
+                src={currentUser.photoURL}
+                alt="User"
+                className="w-full h-full rounded-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="material-symbols-outlined text-[20px]">person</span>
+            )}
+            {currentUser && (
+              <span
+                className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                  isSyncing ? 'bg-amber-400 animate-spin' : 'bg-[#2F6B4F]'
+                }`}
+                title={isSyncing ? 'सिंक हो रहा है...' : 'क्लाउड डेटाबेस सक्रिय'}
+              />
+            )}
           </button>
         </div>
       </div>

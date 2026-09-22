@@ -139,6 +139,31 @@ export interface Translations {
   sendOrderViaWhatsAppBtn: string;
   printOrPdfBtn: string;
   emptyOrderListMsg: string;
+  // Multi-Wholesaler Order Hub
+  wholesalerRationTab: string;
+  wholesalerTobaccoTab: string;
+  wholesalerDailyVanTab: string;
+  wholesalerAllTab: string;
+  rationSlipNotice: string;
+  tobaccoAgencySlipNotice: string;
+  dailySalesmanNotice: string;
+  markOrderGivenBtn: string;
+  orderGivenRecordedBadge: string;
+  receiveStockFromVanBtn: string;
+  stockReceivedSuccessMsg: string;
+  slipViewMode: string;
+  listViewMode: string;
+  copySlipBtn: string;
+  slipCopiedToast: string;
+  orderSlipShopTitle: string;
+  wholesalerVendorLabel: string;
+  deliveryMethodLabel: string;
+  methodSendSlip: string;
+  methodDailySalesman: string;
+  suggestWholesaleSupplier: string;
+  addWholesalerTitle: string;
+  wholesalerPhoneLabel: string;
+  wholesalerTimingLabel: string;
   // Wholesale Bill Scanner
   billScanHeaderTitle: string;
   billScanWarningBanner: string;
@@ -309,6 +334,21 @@ export interface Translations {
   scanRetryingMsg: string;
   scanAutoEnhancedBadge: string;
   btnRetryScan: string;
+  counterBillingTitle: string;
+  counterBillingSubtitle: string;
+  counterBringPrompt: string;
+  counterEmptyMsg: string;
+  counterAddCustomItem: string;
+  counterNothingMissedMsg: string;
+  counterPayCashBtn: string;
+  counterPayUPIBtn: string;
+  counterPayUdhaarBtn: string;
+  counterNextCustomerBtn: string;
+  counterWhatsAppReceipt: string;
+  counterItemsOnCounter: string;
+  counterRunningTotal: string;
+  counterQuickAddPopular: string;
+  counterScanBarcodePrompt: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -451,6 +491,31 @@ export const translations: Record<Language, Translations> = {
     sendOrderViaWhatsAppBtn: 'व्हाट्सएप पर ऑर्डर पर्चा भेजें',
     printOrPdfBtn: 'पर्चा प्रिंट या पीडीएफ सहेजें',
     emptyOrderListMsg: 'सभी सामान पर्याप्त मात्रा में उपलब्ध हैं। अभी कोई ऑर्डर नहीं चाहिए।',
+    // Multi-Wholesaler Order Hub
+    wholesalerRationTab: 'राशन व मंडी पर्चा',
+    wholesalerTobaccoTab: 'सिगरेट व तंबाकू',
+    wholesalerDailyVanTab: 'दैनिक वैन व सेल्समैन',
+    wholesalerAllTab: 'सभी सप्लायर',
+    rationSlipNotice: 'थोक गल्ला व्यापारी / मंडी को पर्चा भेजना पड़ता है (WhatsApp / प्रिंट)',
+    tobaccoAgencySlipNotice: 'सिगरेट एजेंसी को पर्चा भेजना पड़ता है (डब्बा / खोका / बंडल)',
+    dailySalesmanNotice: 'सेल्समैन दुकान पर रोज़ ऑर्डर लेने आते हैं — खाली रैक देखकर ऑर्डर दें',
+    markOrderGivenBtn: 'सेल्समैन को ऑर्डर दे दिया ✓',
+    orderGivenRecordedBadge: 'आज का ऑर्डर दे दिया गया',
+    receiveStockFromVanBtn: 'वैन से माल आ गया (स्टॉक जोड़ें)',
+    stockReceivedSuccessMsg: 'वैन से माल स्टॉक में जोड़ दिया गया!',
+    slipViewMode: 'दुकान पर्चा (Slip View)',
+    listViewMode: 'आइटम लिस्ट (List View)',
+    copySlipBtn: 'पर्चा कॉपी करें',
+    slipCopiedToast: 'पर्चा क्लिपबोर्ड पर कॉपी हो गया!',
+    orderSlipShopTitle: 'दुकान थोक रीऑर्डर पर्चा',
+    wholesalerVendorLabel: 'सप्लायर / थोक व्यापारी',
+    deliveryMethodLabel: 'ऑर्डर व डिलीवरी का तरीका',
+    methodSendSlip: 'पर्चा भेजें (WhatsApp / प्रिंट)',
+    methodDailySalesman: 'दैनिक वैन (दुकान पर आते हैं)',
+    suggestWholesaleSupplier: 'सुझाया गया सप्लायर',
+    addWholesalerTitle: 'नया थोक सप्लायर जोड़ें',
+    wholesalerPhoneLabel: 'व्हाट्सएप / फोन नंबर',
+    wholesalerTimingLabel: 'आने का समय / शेड्यूल',
     // Wholesale Bill Scanner
     billScanHeaderTitle: 'थोक पर्ची सत्यापन',
     billScanWarningBanner: 'रुपयों का मामला है — ध्यान से जांचें',
@@ -547,7 +612,7 @@ export const translations: Record<Language, Translations> = {
     itemsChecked: 'सामान की जांच',
     supplierReturn: 'सप्लायर वापसी',
     sendWhatsApp: 'व्हाट्सएप पर भेजें',
-    whatsappOrderHeader: '📦 *थोक ऑर्डर पर्चा — Krow*\n\n',
+    whatsappOrderHeader: '*थोक ऑर्डर पर्चा — Krōw*\n\n',
     whatsappEstimatedTotal: 'अनुमानित कुल रकम',
     whatsappOrderFooter: 'कृपया उपरोक्त सामान जल्द से जल्द गाड़ी में लोड करवाएं। धन्यवाद!',
     btnBackToLogin: '← वापस लॉगिन पर जाएं',
@@ -620,6 +685,21 @@ export const translations: Record<Language, Translations> = {
     scanRetryingMsg: 'कोई सामान नहीं मिला, अधिक स्पष्टता (High-Contrast) के साथ दोबारा स्कैन हो रहा है...',
     scanAutoEnhancedBadge: 'ऑटो-एन्हांस्ड व सीधा किया गया',
     btnRetryScan: 'फिर से स्कैन करें',
+    counterBillingTitle: 'काउंटर बिक्री पर्चा',
+    counterBillingSubtitle: 'काउंटर पर सामान रखें • पर्चा बनाएं • तुरंत बेचें',
+    counterBringPrompt: 'सामान काउंटर पर जोड़ें',
+    counterEmptyMsg: 'काउंटर खाली है। नीचे दिए गए सामान पर टैप करें या ऊपर खोजें ताकि कोई भी सामान छूटे नहीं।',
+    counterAddCustomItem: '+ अन्य खुला सामान',
+    counterNothingMissedMsg: 'काउंटर पर सभी सामान दर्ज हैं • कुछ भी छूटा नहीं',
+    counterPayCashBtn: 'नकद बिक्री (Cash)',
+    counterPayUPIBtn: 'ऑनलाइन / UPI QR',
+    counterPayUdhaarBtn: 'उधार खाते में लिखें',
+    counterNextCustomerBtn: 'अगला ग्राहक (New Bill)',
+    counterWhatsAppReceipt: 'WhatsApp पर पर्चा भेजें',
+    counterItemsOnCounter: 'काउंटर पर सामान',
+    counterRunningTotal: 'कुल बिल राशि',
+    counterQuickAddPopular: 'लोकप्रिय काउंटर सामान',
+    counterScanBarcodePrompt: 'बारकोड स्कैन करें',
   },
 
   pa: {
@@ -761,6 +841,31 @@ export const translations: Record<Language, Translations> = {
     sendOrderViaWhatsAppBtn: 'ਵਟਸਐਪ \'ਤੇ ਆਰਡਰ ਪਰਚੀ ਭੇਜੋ',
     printOrPdfBtn: 'ਪਰਚੀ ਪ੍ਰਿੰਟ ਜਾਂ ਪੀਡੀਐਫ ਸੇਵ ਕਰੋ',
     emptyOrderListMsg: 'ਸਾਰਾ ਸਮਾਨ ਪੂਰੀ ਮਾਤਰਾ ਵਿੱਚ ਮੌਜੂਦ ਹੈ। ਹੁਣ ਕੋਈ ਆਰਡਰ ਨਹੀਂ ਚਾਹੀਦਾ।',
+    // Multi-Wholesaler Order Hub
+    wholesalerRationTab: 'ਰਾਸ਼ਨ ਤੇ ਮੰਡੀ ਪਰਚੀ',
+    wholesalerTobaccoTab: 'ਸਿਗਰਟ ਤੇ ਤੰਬਾਕੂ',
+    wholesalerDailyVanTab: 'ਰੋਜ਼ਾਨਾ ਵੈਨ ਤੇ ਸੇਲਜ਼ਮੈਨ',
+    wholesalerAllTab: 'ਸਾਰੇ ਸਪਲਾਇਰ',
+    rationSlipNotice: 'ਥੋਕ ਗੱਲਾ ਮੰਡੀ ਵਪਾਰੀ ਨੂੰ ਪਰਚੀ ਭੇਜਣੀ ਪੈਂਦੀ ਹੈ (WhatsApp / ਪ੍ਰਿੰਟ)',
+    tobaccoAgencySlipNotice: 'ਸਿਗਰਟ ਏਜੰਸੀ ਨੂੰ ਪਰਚੀ ਭੇਜਣੀ ਪੈਂਦੀ ਹੈ (ਡੱਬਾ / ਖੋਖਾ / ਬੰਡਲ)',
+    dailySalesmanNotice: 'ਸੇਲਜ਼ਮੈਨ ਦੁਕਾਨ \'ਤੇ ਰੋਜ਼ ਆਰਡਰ ਲੈਣ ਆਉਂਦੇ ਹਨ — ਰੈਕ ਚੈੱਕ ਕਰਕੇ ਆਰਡਰ ਦਿਓ',
+    markOrderGivenBtn: 'ਸੇਲਜ਼ਮੈਨ ਨੂੰ ਆਰਡਰ ਦੇ ਦਿੱਤਾ ✓',
+    orderGivenRecordedBadge: 'ਅੱਜ ਦਾ ਆਰਡਰ ਦੇ ਦਿੱਤਾ ਗਿਆ',
+    receiveStockFromVanBtn: 'ਵੈਨ ਤੋਂ ਮਾਲ ਆ ਗਿਆ (ਸਟਾਕ ਜੋੜੋ)',
+    stockReceivedSuccessMsg: 'ਵੈਨ ਤੋਂ ਮਾਲ ਸਟਾਕ ਵਿੱਚ ਜੋੜ ਦਿੱਤਾ ਗਿਆ!',
+    slipViewMode: 'ਦੁਕਾਨ ਪਰਚੀ (Slip View)',
+    listViewMode: 'ਆਈਟਮ ਲਿਸਟ (List View)',
+    copySlipBtn: 'ਪਰਚੀ ਕਾਪੀ ਕਰੋ',
+    slipCopiedToast: 'ਪਰਚੀ ਕਾਪੀ ਹੋ ਗਈ!',
+    orderSlipShopTitle: 'ਦੁਕਾਨ ਥੋਕ ਰੀਆਰਡਰ ਪਰਚੀ',
+    wholesalerVendorLabel: 'ਸਪਲਾਇਰ / ਥੋਕ ਵਪਾਰੀ',
+    deliveryMethodLabel: 'ਆਰਡਰ ਦਾ ਤਰੀਕਾ',
+    methodSendSlip: 'ਪਰਚੀ ਭੇਜੋ (WhatsApp / ਪ੍ਰਿੰਟ)',
+    methodDailySalesman: 'ਰੋਜ਼ਾਨਾ ਵੈਨ (ਦੁਕਾਨ \'ਤੇ ਆਉਂਦੇ ਹਨ)',
+    suggestWholesaleSupplier: 'ਸੁਝਾਇਆ ਗਿਆ ਸਪਲਾਇਰ',
+    addWholesalerTitle: 'ਨਵਾਂ ਥੋਕ ਸਪਲਾਇਰ ਜੋੜੋ',
+    wholesalerPhoneLabel: 'ਵਟਸਐਪ / ਫ਼ੋਨ ਨੰਬਰ',
+    wholesalerTimingLabel: 'ਆਉਣ ਦਾ ਸਮਾਂ / ਸ਼ਡਿਊਲ',
     // Wholesale Bill Scanner
     billScanHeaderTitle: 'ਥੋਕ ਬਿੱਲ ਪੜਤਾਲ',
     billScanWarningBanner: 'ਰੁਪਇਆਂ ਦਾ ਮਾਮਲਾ ਹੈ — ਧਿਆਨ ਨਾਲ ਜਾਂਚੋ',
@@ -857,7 +962,7 @@ export const translations: Record<Language, Translations> = {
     itemsChecked: 'ਸਮਾਨ ਦੀ ਜਾਂਚ',
     supplierReturn: 'ਸਪਲਾਇਰ ਵਾਪਸੀ',
     sendWhatsApp: 'ਵਟਸਐਪ \'ਤੇ ਭੇਜੋ',
-    whatsappOrderHeader: '📦 *ਥੋਕ ਆਰਡਰ ਪਰਚੀ — Krow*\n\n',
+    whatsappOrderHeader: '*ਥੋਕ ਆਰਡਰ ਪਰਚੀ — Krōw*\n\n',
     whatsappEstimatedTotal: 'ਅੰਦਾਜ਼ਨ ਕੁੱਲ ਰਕਮ',
     whatsappOrderFooter: 'ਕਿਰਪਾ ਕਰਕੇ ਉਪਰੋਕਤ ਸਮਾਨ ਜਲਦੀ ਤੋਂ ਜਲਦੀ ਗੱਡੀ ਵਿੱਚ ਲੋਡ ਕਰਵਾਓ। ਧੰਨਵਾਦ!',
     btnBackToLogin: '← ਵਾਪਸ ਲੌਗਇਨ \'ਤੇ ਜਾਓ',
@@ -930,6 +1035,21 @@ export const translations: Record<Language, Translations> = {
     scanRetryingMsg: 'ਕੋਈ ਸਮਾਨ ਨਹੀਂ ਮਿਲਿਆ, ਹੋਰ ਸਪਸ਼ਟਤਾ ਨਾਲ ਦੁਬਾਰਾ ਸਕੈਨ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ...',
     scanAutoEnhancedBadge: 'ਆਟੋ-ਐਨਹਾਂਸਡ ਅਤੇ ਸਿੱਧਾ ਕੀਤਾ ਗਿਆ',
     btnRetryScan: 'ਦੁਬਾਰਾ ਸਕੈਨ ਕਰੋ',
+    counterBillingTitle: 'ਕਾਊਂਟਰ ਵਿਕਰੀ ਪਰਚਾ',
+    counterBillingSubtitle: 'ਸਾਮਾਨ ਕਾਊਂਟਰ ਤੇ ਲਿਆਓ • ਪਰਚਾ ਬਣਾਓ • ਤੁਰੰਤ ਵੇਚੋ',
+    counterBringPrompt: 'ਸਾਮਾਨ ਕਾਊਂਟਰ ਤੇ ਸ਼ਾਮਲ ਕਰੋ',
+    counterEmptyMsg: 'ਕਾਊਂਟਰ ਖਾਲੀ ਹੈ। ਹੇਠਾਂ ਦਿੱਤੇ ਸਾਮਾਨ ਤੇ ਟੈਪ ਕਰੋ ਤਾਂ ਜੋ ਕੋਈ ਵੀ ਚੀਜ਼ ਨਾ ਛੁੱਟੇ।',
+    counterAddCustomItem: '+ ਹੋਰ ਖੁੱਲ੍ਹਾ ਸਾਮਾਨ',
+    counterNothingMissedMsg: 'ਕਾਊਂਟਰ ਤੇ ਸਾਰਾ ਸਾਮਾਨ ਦਰਜ ਹੈ • ਕੁਝ ਵੀ ਨਹੀਂ ਛੁੱਟਿਆ',
+    counterPayCashBtn: 'ਨਕਦ ਵਿਕਰੀ (Cash)',
+    counterPayUPIBtn: 'ਆਨਲਾਈਨ / UPI QR',
+    counterPayUdhaarBtn: 'ਉਧਾਰ ਖਾਤੇ ਵਿੱਚ ਲਿਖੋ',
+    counterNextCustomerBtn: 'ਅਗਲਾ ਗਾਹਕ (New Bill)',
+    counterWhatsAppReceipt: 'WhatsApp ਤੇ ਪਰਚਾ ਭੇਜੋ',
+    counterItemsOnCounter: 'ਕਾਊਂਟਰ ਤੇ ਸਾਮਾਨ',
+    counterRunningTotal: 'ਕੁੱਲ ਬਿੱਲ ਰਕਮ',
+    counterQuickAddPopular: 'ਮਸ਼ਹੂਰ ਕਾਊਂਟਰ ਸਾਮਾਨ',
+    counterScanBarcodePrompt: 'ਬਾਰਕੋਡ ਸਕੈਨ ਕਰੋ',
   },
 
   en: {
@@ -1071,6 +1191,31 @@ export const translations: Record<Language, Translations> = {
     sendOrderViaWhatsAppBtn: 'Send Order Slip via WhatsApp',
     printOrPdfBtn: 'Print / Save PDF Slip',
     emptyOrderListMsg: 'All items are well stocked above reorder thresholds.',
+    // Multi-Wholesaler Order Hub
+    wholesalerRationTab: 'Ration & Mandi',
+    wholesalerTobaccoTab: 'Tobacco & Cigarettes',
+    wholesalerDailyVanTab: 'Daily Route Van',
+    wholesalerAllTab: 'All Wholesalers',
+    rationSlipNotice: 'Send order slip to Mandi / grain merchant (WhatsApp / Print)',
+    tobaccoAgencySlipNotice: 'Send indent slip to Cigarette Agency (Packets / Cartons)',
+    dailySalesmanNotice: 'Salesman visits shop daily — Counter check empty racks & order',
+    markOrderGivenBtn: 'Mark Order Given to Salesman ✓',
+    orderGivenRecordedBadge: "Today's order recorded as given",
+    receiveStockFromVanBtn: 'Stock Received from Van (Restock)',
+    stockReceivedSuccessMsg: 'Items received from van and added to store stock!',
+    slipViewMode: 'Order Slip View',
+    listViewMode: 'Item List View',
+    copySlipBtn: 'Copy Slip Text',
+    slipCopiedToast: 'Order slip copied to clipboard!',
+    orderSlipShopTitle: 'Wholesale Reorder Slip',
+    wholesalerVendorLabel: 'Supplier / Wholesaler',
+    deliveryMethodLabel: 'Ordering & Delivery Method',
+    methodSendSlip: 'Send Slip (WhatsApp / Print)',
+    methodDailySalesman: 'Daily Van (Visits Shop Daily)',
+    suggestWholesaleSupplier: 'Suggested Wholesaler',
+    addWholesalerTitle: 'Add New Wholesaler',
+    wholesalerPhoneLabel: 'WhatsApp / Phone Number',
+    wholesalerTimingLabel: 'Visit Time / Order Schedule',
     // Wholesale Bill Scanner
     billScanHeaderTitle: 'Verify Wholesale Bill',
     billScanWarningBanner: 'Money matters — Verify carefully',
@@ -1167,7 +1312,7 @@ export const translations: Record<Language, Translations> = {
     itemsChecked: 'items audited',
     supplierReturn: 'Supplier Return',
     sendWhatsApp: 'Send via WhatsApp',
-    whatsappOrderHeader: '📦 *Wholesale Reorder Slip — Krow*\n\n',
+    whatsappOrderHeader: '*Wholesale Reorder Slip — Krōw*\n\n',
     whatsappEstimatedTotal: 'Estimated Total Bill',
     whatsappOrderFooter: 'Please load and dispatch the items as soon as possible. Thank you!',
     btnBackToLogin: '← Back to Login',
@@ -1240,6 +1385,21 @@ export const translations: Record<Language, Translations> = {
     scanRetryingMsg: 'No items detected, retrying with enhanced clarity...',
     scanAutoEnhancedBadge: 'Auto-Enhanced & Deskewed',
     btnRetryScan: 'Retry Scan',
+    counterBillingTitle: 'Counter Sell POS',
+    counterBillingSubtitle: 'Bring items to counter • Build list • Quick checkout',
+    counterBringPrompt: 'Bring items onto counter',
+    counterEmptyMsg: 'Counter is empty. Tap items below or search so that nothing is missed.',
+    counterAddCustomItem: '+ Custom / Loose Item',
+    counterNothingMissedMsg: 'All items accounted for • Nothing missed',
+    counterPayCashBtn: 'Cash Checkout',
+    counterPayUPIBtn: 'Online / UPI QR',
+    counterPayUdhaarBtn: 'Add to Udhaar Ledger',
+    counterNextCustomerBtn: 'Next Customer (New Bill)',
+    counterWhatsAppReceipt: 'Send WhatsApp Slip',
+    counterItemsOnCounter: 'Items on Counter',
+    counterRunningTotal: 'Total Bill Amount',
+    counterQuickAddPopular: 'Quick Shelf Items',
+    counterScanBarcodePrompt: 'Scan Barcode',
   },
 
   ja: {
@@ -1381,6 +1541,31 @@ export const translations: Record<Language, Translations> = {
     sendOrderViaWhatsAppBtn: 'WhatsAppで発注伝票を送信',
     printOrPdfBtn: '伝票を印刷 / PDF保存',
     emptyOrderListMsg: '全商品の在庫が発注点を超えており、現在発注の必要はありません。',
+    // Multi-Wholesaler Order Hub
+    wholesalerRationTab: '穀物・調味料卸',
+    wholesalerTobaccoTab: 'たばこ総代理店',
+    wholesalerDailyVanTab: '巡回営業・配送',
+    wholesalerAllTab: '全仕入先',
+    rationSlipNotice: '穀物・調味料卸売店へ発注書を送付（WhatsApp / 印刷）',
+    tobaccoAgencySlipNotice: 'たばこ総代理店へ発注伝票を送付（カートン単位）',
+    dailySalesmanNotice: '巡回営業担当が毎日店頭訪問 — 陳列棚を確認して即時発注',
+    markOrderGivenBtn: '担当者に発注済みにする ✓',
+    orderGivenRecordedBadge: '本日の発注完了を記録しました',
+    receiveStockFromVanBtn: '巡回車から入荷受領（在庫加算）',
+    stockReceivedSuccessMsg: '巡回車からの納品を在庫に反映しました！',
+    slipViewMode: '発注伝票ビュー',
+    listViewMode: '商品一覧ビュー',
+    copySlipBtn: '伝票テキストをコピー',
+    slipCopiedToast: '伝票をクリップボードにコピーしました！',
+    orderSlipShopTitle: '店舗仕入発注伝票',
+    wholesalerVendorLabel: '仕入先・問屋',
+    deliveryMethodLabel: '発注・納品方式',
+    methodSendSlip: '伝票送付（WhatsApp / 印刷）',
+    methodDailySalesman: '定期巡回（毎日店舗訪問）',
+    suggestWholesaleSupplier: '推奨仕入先',
+    addWholesalerTitle: '新しい仕入先を追加',
+    wholesalerPhoneLabel: '電話 / 連絡先',
+    wholesalerTimingLabel: '訪問時間・スケジュール',
     // Wholesale Bill Scanner
     billScanHeaderTitle: '仕入納品書・領収書スキャン検証',
     billScanWarningBanner: '確実な照合 — 荷受け時の検品',
@@ -1477,7 +1662,7 @@ export const translations: Record<Language, Translations> = {
     itemsChecked: '品目を点検',
     supplierReturn: '仕入先返品',
     sendWhatsApp: 'WhatsAppで送信',
-    whatsappOrderHeader: '📦 *仕入れ発注伝票 — Krow*\n\n',
+    whatsappOrderHeader: '*仕入れ発注伝票 — Krōw*\n\n',
     whatsappEstimatedTotal: '推定発注総額',
     whatsappOrderFooter: '上記の商品を至急手配・出荷してください。よろしくお願いいたします。',
     btnBackToLogin: '← ログインに戻る',
@@ -1550,5 +1735,20 @@ export const translations: Record<Language, Translations> = {
     scanRetryingMsg: '品目が検出されませんでした。高コントラスト処理で再スキャン中...',
     scanAutoEnhancedBadge: '自動鮮明化・傾き補正済み',
     btnRetryScan: '再スキャン',
+    counterBillingTitle: 'カウンターPOS売上伝票',
+    counterBillingSubtitle: 'カウンターに商品を並べ・伝票化・即時販売',
+    counterBringPrompt: '商品をカウンターに追加',
+    counterEmptyMsg: 'カウンターは空です。漏れがないよう下の品目をタップまたは検索してください。',
+    counterAddCustomItem: '+ その他・量り売り品目',
+    counterNothingMissedMsg: 'すべての品目が計上されました • 漏れなし',
+    counterPayCashBtn: '現金支払い (Cash)',
+    counterPayUPIBtn: 'オンライン / QR決済',
+    counterPayUdhaarBtn: '売掛台帳に記帳 (ツケ)',
+    counterNextCustomerBtn: '次のお客様 (新規伝票)',
+    counterWhatsAppReceipt: 'WhatsAppで伝票送信',
+    counterItemsOnCounter: 'カウンター上の商品',
+    counterRunningTotal: 'お会計合計額',
+    counterQuickAddPopular: 'よく出る定番商品',
+    counterScanBarcodePrompt: 'バーコードをスキャン',
   },
 };

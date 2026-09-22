@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Language, StoreType } from '../types';
 import { translations } from '../translations';
-import { KrowWordmark, KiranaStoreIllustration, SproutIcon } from './KrowIllustrations';
+import { KiranaStoreIllustration } from './KrowIllustrations';
+import { AppLogo } from './AppLogo';
 import { STORE_TYPE_CONFIGS } from '../data/storeTypes';
 
 interface KrowWelcomeFirstViewProps {
@@ -92,27 +93,19 @@ export const KrowWelcomeFirstView: React.FC<KrowWelcomeFirstViewProps> = ({
           </div>
         )}
 
-        {/* Clean Header Bar with Little Sprout */}
+        {/* Clean Header Bar with Unified Canonical Logo */}
         <div className="pt-6 pb-2 px-6 flex flex-col items-center text-center">
-          {/* Subtle Top Sprout Leaf */}
-          <div className="w-10 h-10 rounded-full bg-[#E7F0EA] border border-[#2F6B4F]/20 flex items-center justify-center mb-3 shadow-2xs">
-            <SproutIcon size={22} />
-          </div>
-
-          {/* Authentic Brand Wordmark with sprout leaves over the 'o' */}
-          <KrowWordmark
+          <AppLogo
             size="xl"
-            showSparkles={true}
-            showSubtitle={true}
+            showText={true}
             subtitle={selectedLang === 'hi' ? 'सरल साधन • बेहतर व्यापार' : selectedLang === 'pa' ? 'ਸਧਾਰਨ ਸਾਧਨ • ਬਿਹਤਰ ਵਪਾਰ' : 'Simple tools. Better business.'}
           />
 
           {/* Subtitle Dedication Pill */}
-          <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 border border-[#E4DFD2] text-[11px] font-semibold text-[#4A6B56] shadow-2xs">
-            <span>✨</span>
+          <div className="mt-3 inline-flex items-center px-3 py-1 rounded-full bg-white border border-[#E4DFD2] text-[11px] font-semibold text-[#4A6B56] shadow-2xs">
             <span>
               {selectedLang === 'hi'
-                ? 'छोटे दुकानदारों के लिए विशेष रूप से निर्मित'
+                ? 'छोटे व मध्यम दुकानदारों के लिए विशेष रूप से निर्मित'
                 : selectedLang === 'pa'
                 ? 'ਛੋਟੇ ਦੁਕਾਨਦਾਰਾਂ ਲਈ ਵਿਸ਼ੇਸ਼ ਤੌਰ ਤੇ ਬਣਾਇਆ ਗਿਆ'
                 : 'Built with care for small shopkeepers'}
@@ -142,7 +135,7 @@ export const KrowWelcomeFirstView: React.FC<KrowWelcomeFirstViewProps> = ({
               type="button"
               className={`py-2 text-xs font-bold rounded-xl transition-all ${activeTab === 'story' ? 'bg-white text-[#163A2B] shadow-xs' : 'text-[#726C60] hover:text-[#262421]'}`}
             >
-              {selectedLang === 'hi' ? 'मकसद ♡' : selectedLang === 'pa' ? 'ਮਕਸਦ ♡' : 'Why Krōw'}
+              {selectedLang === 'hi' ? 'मकसद' : selectedLang === 'pa' ? 'ਮਕਸਦ' : 'Why Krōw'}
             </button>
           </div>
         </div>
@@ -217,9 +210,8 @@ export const KrowWelcomeFirstView: React.FC<KrowWelcomeFirstViewProps> = ({
         {activeTab === 'features' && (
           <div className="px-5 py-3 space-y-2.5 animate-fade-in">
             <div className="flex items-center justify-between px-1 mb-1">
-              <h2 className="text-sm font-extrabold text-[#163A2B] flex items-center gap-1.5 font-display">
-                <span>What can Krōw do?</span>
-                <span className="text-[#4E9F6E]">˗ˏˋ ˎˊ˗</span>
+              <h2 className="text-sm font-extrabold text-[#163A2B] font-display">
+                What can Krōw do?
               </h2>
               <span className="text-[10px] font-bold text-[#4A6B56] bg-[#E7F0EA] px-2 py-0.5 rounded-full">
                 5 Simple Tools
@@ -252,7 +244,7 @@ export const KrowWelcomeFirstView: React.FC<KrowWelcomeFirstViewProps> = ({
 
             <div className="text-center py-1">
               <span className="text-xs font-semibold text-[#4A6B56] font-display">
-                Simple. Useful. Made for small businesses. ☺
+                Simple. Useful. Made for small businesses.
               </span>
             </div>
           </div>
@@ -265,9 +257,8 @@ export const KrowWelcomeFirstView: React.FC<KrowWelcomeFirstViewProps> = ({
               <span className="text-xs font-bold text-[#2F6B4F] uppercase tracking-wider">
                 Founder's Note
               </span>
-              <h2 className="text-lg font-extrabold text-[#163A2B] font-display flex items-center justify-center gap-1.5">
-                <span>Why I built it?</span>
-                <span className="text-[#4E9F6E]">˗ˏˋ ˎˊ˗</span>
+              <h2 className="text-lg font-extrabold text-[#163A2B] font-display">
+                Why I built it?
               </h2>
             </div>
 
@@ -283,11 +274,11 @@ export const KrowWelcomeFirstView: React.FC<KrowWelcomeFirstViewProps> = ({
               <div className="p-3 rounded-xl bg-[#E7F0EA] border border-[#2F6B4F]/20 text-[#163A2B] font-semibold text-xs leading-relaxed">
                 {selectedLang === 'hi'
                   ? 'इसलिए मैंने Krōw बनाया ताकि दुकानदारों का रोज़ का काम आसान, तेज़ और चिंता-मुक्त हो सके।'
-                  : 'So I built Krōw to make their daily work simpler, faster and less stressful. ♫'}
+                  : 'So I built Krōw to make their daily work simpler, faster and less stressful.'}
               </div>
 
               <div className="flex items-center justify-between pt-2 border-t border-[#F0EBE0] text-xs font-bold text-[#2F6B4F]">
-                <span>Small shops = Big dreams ♡</span>
+                <span>Small shops • Big dreams</span>
                 <span className="text-[10px] text-[#726C60] font-normal">Krōw Retail OS</span>
               </div>
             </div>

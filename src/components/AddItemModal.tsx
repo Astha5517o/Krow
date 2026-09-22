@@ -1,9 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { StockItem, StoreType, Language, ExchangeType } from '../types';
+import { StockItem, StoreType, Language, ExchangeType, SupplierChannel, SupplierOrderMode } from '../types';
 import { translations } from '../translations';
 import { getDefaultCategories } from '../data/defaultData';
+import { safeStopScanner } from '../utils/scannerUtils';
 import { lookupMasterBarcode, MasterProduct } from '../data/masterBarcodes';
+import { inferWholesalerInfo, DEFAULT_WHOLESALERS } from '../data/wholesalersData';
+import {
+  searchKaryanaMaster,
+  KaryanaMasterItem,
+  getKaryanaMasterCategories,
+  KARYANA_MASTER_ITEMS,
+} from '../data/karyanaMasterCatalog';
+import {
+  searchStationeryMaster,
+  STATIONERY_SECTIONS,
+} from '../data/stationeryMasterCatalog';
+import { playSuccessChime } from '../utils/audio';
 
 interface AddItemModalProps {
   language: Language;
@@ -38,15 +51,109 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   const [sellPrice, setSellPrice] = useState<string>(itemToEdit?.sellPrice ? String(itemToEdit.sellPrice) : '');
   const [isPerishable, setIsPerishable] = useState<boolean>(itemToEdit?.isPerishable ?? false);
   const [exchangeType, setExchangeType] = useState<ExchangeType>(itemToEdit?.exchangeType || 'none');
-  const [supplierName, setSupplierName] = useState<string>(itemToEdit?.supplierName || '');
+  const [supplierName, setSupplierName] = useState<string>(
+    itemToEdit?.supplierName || inferWholesalerInfo(itemToEdit?.category || categories[0], itemToEdit?.name).suggestedSupplierName
+  );
+  const [supplierChannel, setSupplierChannel] = useState<SupplierChannel>(
+    itemToEdit?.supplierChannel || inferWholesalerInfo(itemToEdit?.category || categories[0], itemToEdit?.name).channel
+  );
+  const [supplierOrderMode, setSupplierOrderMode] = useState<SupplierOrderMode>(
+    itemToEdit?.supplierOrderMode || inferWholesalerInfo(itemToEdit?.category || categories[0], itemToEdit?.name).orderMode
+  );
+  const [isLooseItem, setIsLooseItem] = useState<boolean>(itemToEdit?.isLooseItem ?? false);
+  const [bulkPackWeightKg, setBulkPackWeightKg] = useState<string>(itemToEdit?.bulkPackWeightKg ? String(itemToEdit.bulkPackWeightKg) : '');
+  const [looseRatePer50g, setLooseRatePer50g] = useState<string>(itemToEdit?.looseRatePer50g ? String(itemToEdit.looseRatePer50g) : '');
+  const [looseRatePer100g, setLooseRatePer100g] = useState<string>(itemToEdit?.looseRatePer100g ? String(itemToEdit.looseRatePer100g) : '');
   const [error, setError] = useState('');
   const [matchedMaster, setMatchedMaster] = useState<MasterProduct | undefined>(undefined);
+
+  // Master Catalog Autocomplete Dropdown State
+  const [showCatalogDropdown, setShowCatalogDropdown] = useState(false);
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState<string>('all');
+  const [autoFillSuccessNotice, setAutoFillSuccessNotice] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Camera scanning state for quick barcode scanning
   const [showCamera, setShowCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const html5QrRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = 'add-item-barcode-scanner';
+
+  // Filtered master catalog items based on typed name and optional category
+  const masterCatalogSuggestions = useMemo(() => {
+    if (storeType === 'stationery') {
+      const statResults = searchStationeryMaster(
+        name,
+        14,
+        catalogCategoryFilter === 'all' ? undefined : catalogCategoryFilter
+      );
+      if (statResults.length > 0 || !name.trim()) return statResults;
+    }
+    const karyanaResults = searchKaryanaMaster(
+      name,
+      12,
+      catalogCategoryFilter === 'all' ? undefined : catalogCategoryFilter
+    );
+    const stationeryResults = searchStationeryMaster(
+      name,
+      6,
+      catalogCategoryFilter === 'all' ? undefined : catalogCategoryFilter
+    );
+    return [...stationeryResults, ...karyanaResults].slice(0, 14);
+  }, [name, catalogCategoryFilter, storeType]);
+
+  // Click outside to close master catalog dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowCatalogDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectMasterItem = (item: KaryanaMasterItem) => {
+    setName(language === 'en' ? (item.nameEn || item.name) : item.name);
+
+    if (categories.includes(item.category)) {
+      setCategory(item.category);
+    } else {
+      const match = categories.find((c) => c.includes(item.category) || item.category.includes(c));
+      if (match) setCategory(match);
+    }
+
+    setUnit(item.unit || 'पैकेट');
+    setSellPrice(String(item.sellPrice || ''));
+    setBuyPrice(String(item.buyPrice || ''));
+    if (item.barcode) {
+      setBarcode(item.barcode);
+    }
+    if (item.isPerishable) {
+      setIsPerishable(true);
+      if (item.exchangeType) setExchangeType(item.exchangeType);
+    }
+    if (item.isLooseItem) {
+      setIsLooseItem(true);
+      if (item.bulkPackWeightKg) setBulkPackWeightKg(String(item.bulkPackWeightKg));
+      if (item.looseRatePer50g) setLooseRatePer50g(String(item.looseRatePer50g));
+      if (item.looseRatePer100g) setLooseRatePer100g(String(item.looseRatePer100g));
+    }
+
+    const inferred = inferWholesalerInfo(item.category, item.name);
+    setSupplierChannel(inferred.channel);
+    setSupplierOrderMode(inferred.orderMode);
+    setSupplierName(inferred.suggestedSupplierName);
+
+    playSuccessChime();
+    setShowCatalogDropdown(false);
+    setAutoFillSuccessNotice(
+      language === 'en'
+        ? `⚡ Auto-filled: ${item.nameEn || item.name} (₹${item.sellPrice} MRP)`
+        : `⚡ 2-क्लिक ऑटो-फिल: ${item.name} (MRP ₹${item.sellPrice})`
+    );
+    setTimeout(() => setAutoFillSuccessNotice(null), 3500);
+  };
 
   // Play crisp scan beep sound
   const playScanBeep = () => {
@@ -71,11 +178,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
 
   useEffect(() => {
     if (!showCamera) {
-      if (html5QrRef.current && html5QrRef.current.isScanning) {
-        html5QrRef.current.stop().catch(() => {}).finally(() => {
-          html5QrRef.current?.clear();
-          html5QrRef.current = null;
-        });
+      if (html5QrRef.current) {
+        const scannerInstance = html5QrRef.current;
+        html5QrRef.current = null;
+        safeStopScanner(scannerInstance);
       }
       return;
     }
@@ -122,6 +228,11 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
           },
           () => {}
         );
+
+        if (!isMounted) {
+          await safeStopScanner(qr);
+          return;
+        }
       } catch {
         if (isMounted) {
           setCameraError(
@@ -136,11 +247,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
     return () => {
       isMounted = false;
       clearTimeout(timer);
-      if (html5QrRef.current && html5QrRef.current.isScanning) {
-        html5QrRef.current.stop().catch(() => {}).finally(() => {
-          html5QrRef.current?.clear();
-          html5QrRef.current = null;
-        });
+      if (html5QrRef.current) {
+        const scannerInstance = html5QrRef.current;
+        html5QrRef.current = null;
+        safeStopScanner(scannerInstance);
       }
     };
   }, [showCamera, language]);
@@ -165,6 +275,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         setUnit(found.unit);
         setSellPrice(String(found.sellPrice));
         setBuyPrice(String(found.buyPrice));
+        const inferred = inferWholesalerInfo(found.category, found.name);
+        setSupplierChannel(inferred.channel);
+        setSupplierOrderMode(inferred.orderMode);
+        setSupplierName(inferred.suggestedSupplierName);
       }
     }
   }, [initialBarcode, itemToEdit, language, name]);
@@ -175,6 +289,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
     setUnit(m.unit);
     setSellPrice(String(m.sellPrice));
     setBuyPrice(String(m.buyPrice));
+    const inferred = inferWholesalerInfo(m.category, m.name);
+    setSupplierChannel(inferred.channel);
+    setSupplierOrderMode(inferred.orderMode);
+    setSupplierName(inferred.suggestedSupplierName);
   };
 
   const numBuy = parseFloat(buyPrice) || 0;
@@ -207,7 +325,13 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         sellPrice: numSell,
         isPerishable,
         exchangeType: isPerishable ? exchangeType : 'none',
+        isLooseItem,
+        bulkPackWeightKg: bulkPackWeightKg ? parseFloat(bulkPackWeightKg) : undefined,
+        looseRatePer50g: looseRatePer50g ? parseFloat(looseRatePer50g) : undefined,
+        looseRatePer100g: looseRatePer100g ? parseFloat(looseRatePer100g) : undefined,
         supplierName: supplierName.trim() || undefined,
+        supplierChannel,
+        supplierOrderMode,
       },
       itemToEdit?.id
     );
@@ -255,18 +379,203 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
               </h3>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-[#262421] mb-1">
-                {t.itemNameLabel} *
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t.itemNamePlaceholder}
-                required
-                className="w-full h-11 px-3 rounded-xl border border-[#E4DFD2] bg-[#FAF7F0] text-sm text-[#262421] focus:outline-none focus:border-[#2F6B4F]"
-              />
+            {/* 1-Click Auto-Fill Toast Notification */}
+            {autoFillSuccessNotice && (
+              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-bold text-emerald-800 flex items-center justify-between shadow-xs animate-scale-up">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-emerald-600 text-base">check_circle</span>
+                  <span>{autoFillSuccessNotice}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoFillSuccessNotice(null)}
+                  className="text-emerald-700 hover:text-emerald-900"
+                >
+                  <span className="material-symbols-outlined text-xs">close</span>
+                </button>
+              </div>
+            )}
+
+            {/* Item Name Input with Master Catalog Autocomplete */}
+            <div className="relative" ref={dropdownRef}>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-[#262421]">
+                  {t.itemNameLabel} *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowCatalogDropdown(!showCatalogDropdown)}
+                  className="text-[11px] font-bold text-[#2F6B4F] hover:text-[#1E4632] flex items-center gap-1 bg-[#2F6B4F]/10 hover:bg-[#2F6B4F]/15 px-2 py-0.5 rounded-lg transition-colors"
+                >
+                  <span className="material-symbols-outlined text-xs">menu_book</span>
+                  <span>{showCatalogDropdown ? (language === 'en' ? 'Hide Catalog' : 'कैटलॉग छुपाएं') : (language === 'en' ? 'Master Catalog (250+ items)' : 'किराना कैटलॉग (250+ आइटम)')}</span>
+                </button>
+              </div>
+
+              {/* Category Filter Chips for Master Catalog */}
+              <div className="flex items-center gap-1 overflow-x-auto pb-1.5 scrollbar-none mb-1 text-[11px]">
+                {[
+                  { id: 'all', label: language === 'en' ? 'All Items' : 'सभी सामान' },
+                  { id: 'दाल व अनाज', label: '🌾 दाल व अनाज' },
+                  { id: 'मसाले', label: '🧂 मसाले' },
+                  { id: 'खाद्य तेल व घी', label: '🍳 तेल व घी' },
+                  { id: 'चाय व पेय', label: '☕ चाय व पेय' },
+                  { id: 'दूध व ब्रेड', label: '🥛 दूध व ब्रेड' },
+                  { id: 'बिस्कुट व नमकीन', label: '🍫 बिस्कुट/नमकीन' },
+                  { id: 'पैकेज्ड फूड', label: '🥫 मैगी/नूडल्स' },
+                  { id: 'पर्सनल केयर', label: '🧼 साबुन/तेल' },
+                  { id: 'सफाई सामान', label: '🧽 सर्फ/सफाई' },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      setCatalogCategoryFilter(cat.id);
+                      setShowCatalogDropdown(true);
+                    }}
+                    className={`px-2 py-0.5 rounded-full whitespace-nowrap transition-all text-[11px] font-semibold ${
+                      catalogCategoryFilter === cat.id
+                        ? 'bg-[#2F6B4F] text-white shadow-2xs'
+                        : 'bg-[#F3EFE6] text-[#615C53] hover:bg-[#EAE4D6]'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setShowCatalogDropdown(true);
+                  }}
+                  onFocus={() => setShowCatalogDropdown(true)}
+                  placeholder={
+                    storeType === 'stationery'
+                      ? (language === 'en' ? 'Type stationery item name (e.g. Ball Pen, Copy, Geometry Box, Fevicol...)' : 'स्टेशनरी सामान का नाम लिखें (जैसे बॉल पेन, कॉपी, रजिस्टर, फेविकोल, स्केल...)')
+                      : (language === 'en' ? 'Type item name (e.g. Maggi, Atta, Salt, Oil...)' : 'सामान का नाम लिखें (जैसे मैगी, आटा, तेल, नमक, हल्दी...)')
+                  }
+                  required
+                  className="w-full h-11 px-3 pr-9 rounded-xl border border-[#E4DFD2] bg-[#FAF7F0] text-sm text-[#262421] focus:outline-none focus:border-[#2F6B4F]"
+                />
+                {name && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setName('');
+                      setShowCatalogDropdown(true);
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9A9386] hover:text-[#262421]"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Master Catalog Dropdown Suggestions */}
+              {showCatalogDropdown && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-[#2F6B4F] rounded-2xl shadow-xl z-30 overflow-hidden animate-scale-up">
+                  <div className="bg-[#FAF7F0] px-3 py-1.5 border-b border-[#E4DFD2] flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#1E4632] flex items-center gap-1">
+                      <span className="material-symbols-outlined text-xs text-[#2F6B4F]">auto_awesome</span>
+                      <span>
+                        {storeType === 'stationery'
+                          ? (language === 'en' ? 'Stationery Master Catalog (Click to Auto-fill all fields)' : 'स्टेशनरी मास्टर कैटलॉग (क्लिक करते ही भाव, बारकोड व विवरण भर जाएगा)')
+                          : (language === 'en' ? 'Karyana Master Catalog (Click to Auto-fill all fields)' : 'किराना मास्टर कैटलॉग (क्लिक करते ही भाव व सब भर जाएगा)')}
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-[#726C60]">
+                      {masterCatalogSuggestions.length} {language === 'en' ? 'items' : 'आइटम'}
+                    </span>
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto divide-y divide-[#F0EBE0]">
+                    {masterCatalogSuggestions.length > 0 ? (
+                      masterCatalogSuggestions.map((mItem) => (
+                        <div
+                          key={mItem.id}
+                          onClick={() => handleSelectMasterItem(mItem)}
+                          className="p-2.5 hover:bg-[#F4F9F6] cursor-pointer transition-colors flex items-center justify-between gap-2 group"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-[#262421] group-hover:text-[#1E4632]">
+                                {mItem.name}
+                              </span>
+                              {mItem.isPerishable && (
+                                <span className="text-[9px] bg-rose-100 text-rose-800 px-1 py-0.2 rounded font-bold">
+                                  {language === 'en' ? 'Fresh' : 'ताज़ा'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[#726C60]">
+                              <span className="truncate">{mItem.nameEn}</span>
+                              <span>•</span>
+                              <span className="bg-[#FAF7F0] px-1.5 py-0.2 rounded text-[10px] font-medium border border-[#E4DFD2]">
+                                {mItem.category}
+                              </span>
+                              <span>•</span>
+                              <span className="font-medium text-[#262421]">{mItem.unit}</span>
+                              {mItem.barcode && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-mono text-[10px] text-[#2F6B4F] bg-[#EBF4EE] px-1.5 py-0.2 rounded border border-[#CDE5D6] flex items-center gap-0.5">
+                                    <span className="material-symbols-outlined text-[10px]">barcode_scanner</span>
+                                    {mItem.barcode}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="text-right">
+                              <span className="block text-xs font-black text-[#1E4632]">
+                                ₹{mItem.sellPrice}
+                              </span>
+                              <span className="block text-[10px] text-[#726C60]">
+                                खरीद: ₹{mItem.buyPrice}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="px-2 py-1 rounded-lg bg-[#2F6B4F] text-white text-[11px] font-bold group-hover:bg-[#1E4632] shadow-2xs flex items-center gap-0.5"
+                            >
+                              <span>चुनें</span>
+                              <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-4 text-center text-xs text-[#726C60] space-y-1">
+                        <p className="font-semibold text-[#262421]">
+                          {language === 'en' ? 'No catalog item matches this search' : 'कैटलॉग में यह नाम नहीं मिला'}
+                        </p>
+                        <p className="text-[11px]">
+                          {language === 'en' ? 'You can type your own custom item name and details below.' : 'आप नीचे अपना नया नाम और भाव दर्ज कर सकते हैं।'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-2 bg-[#FAF7F0] border-t border-[#E4DFD2] flex items-center justify-between text-[11px]">
+                    <span className="text-[#726C60]">
+                      💡 2 क्लिक में पूरा फॉर्म भरें (टाइपिंग की ज़रूरत नहीं)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowCatalogDropdown(false)}
+                      className="text-[#2F6B4F] font-bold hover:underline"
+                    >
+                      {language === 'en' ? 'Close' : 'बंद करें'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Optional Barcode for packaged goods */}
@@ -422,7 +731,15 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                   <button
                     key={cat}
                     type="button"
-                    onClick={() => setCategory(cat)}
+                    onClick={() => {
+                      setCategory(cat);
+                      const inferred = inferWholesalerInfo(cat, name);
+                      setSupplierChannel(inferred.channel);
+                      setSupplierOrderMode(inferred.orderMode);
+                      if (!supplierName || supplierName === 'गुप्ता होलसेल एजेंसी') {
+                        setSupplierName(inferred.suggestedSupplierName);
+                      }
+                    }}
                     className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                       category === cat
                         ? 'bg-[#2F6B4F] text-white'
@@ -493,6 +810,140 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                 className="w-full h-11 px-3 rounded-xl border border-[#E4DFD2] bg-[#FAF7F0] text-sm text-[#262421] focus:outline-none focus:border-[#2F6B4F]"
               />
             </div>
+          </div>
+
+          {/* 2B. Loose Item / Bulk-to-Loose Weight Selling Setting */}
+          <div className="bg-white p-4 rounded-2xl border border-[#E4DFD2] shadow-2xs flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-[#E7F0EA] text-[#1E4632] text-xs font-bold flex items-center justify-center">
+                  ⚖️
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-[#262421]">
+                    {language === 'en' ? 'Open Loose / Weight Selling' : 'खुली नमकीन / खुला सामान (वजन से बिक्री)'}
+                  </h3>
+                  <p className="text-[11px] text-[#726C60]">
+                    {language === 'en'
+                      ? 'Sell 50g, 100g, or custom ₹ amount from big bulk packet'
+                      : 'थोक पैकेट (5kg) से 50 ग्राम, 100 ग्राम या ₹10-₹20 में बेचें'}
+                  </p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isLooseItem}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsLooseItem(checked);
+                    if (checked) {
+                      if (!unit || unit === 'पैकेट') setUnit('किलो');
+                      if (!looseRatePer50g) setLooseRatePer50g('10');
+                      if (!looseRatePer100g) setLooseRatePer100g('20');
+                      if (!bulkPackWeightKg) setBulkPackWeightKg('5');
+                    }
+                  }}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2F6B4F]"></div>
+              </label>
+            </div>
+
+            {isLooseItem && (
+              <div className="space-y-3 pt-2 border-t border-[#E4DFD2] animate-fade-in">
+                <div className="p-2.5 rounded-xl bg-[#F4F9F6] border border-[#2F6B4F]/20 text-[11px] text-[#1E4632] flex items-start gap-2">
+                  <span className="material-symbols-outlined text-sm text-[#2F6B4F] shrink-0 mt-0.5">info</span>
+                  <span>
+                    {language === 'en'
+                      ? 'When selling 50g for ₹10, inventory will deduct 0.05 kg from your bulk stock automatically.'
+                      : 'बिल में 50g = ₹10 बेचते ही आपके बल्क स्टॉक से 0.05 किलो स्टॉक स्वतः घट जाएगा।'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#262421] mb-1">
+                      {language === 'en' ? 'Bulk Pack Weight (Kg)' : 'थोक पैकेट वजन (किलो)'}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="any"
+                        value={bulkPackWeightKg}
+                        onChange={(e) => setBulkPackWeightKg(e.target.value)}
+                        placeholder="5"
+                        className="w-full h-10 px-2.5 pr-8 rounded-xl border border-[#E4DFD2] bg-[#FAF7F0] text-xs font-bold text-[#262421] focus:outline-none focus:border-[#2F6B4F]"
+                      />
+                      <span className="absolute right-2.5 top-2.5 text-xs text-[#726C60]">Kg</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#262421] mb-1">
+                      {language === 'en' ? '50g Rate (₹)' : '50 ग्राम भाव (₹)'}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-2.5 text-xs text-[#726C60]">₹</span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={looseRatePer50g}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setLooseRatePer50g(val);
+                          const n = parseFloat(val);
+                          if (!isNaN(n) && (!looseRatePer100g || parseFloat(looseRatePer100g) === 0)) {
+                            setLooseRatePer100g(String(n * 2));
+                          }
+                        }}
+                        placeholder="10"
+                        className="w-full h-10 pl-6 pr-2 rounded-xl border border-[#E4DFD2] bg-[#FAF7F0] text-xs font-bold text-[#1E4632] focus:outline-none focus:border-[#2F6B4F]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#262421] mb-1">
+                      {language === 'en' ? '100g Rate (₹)' : '100 ग्राम भाव (₹)'}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-2.5 text-xs text-[#726C60]">₹</span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={looseRatePer100g}
+                        onChange={(e) => setLooseRatePer100g(e.target.value)}
+                        placeholder="20"
+                        className="w-full h-10 pl-6 pr-2 rounded-xl border border-[#E4DFD2] bg-[#FAF7F0] text-xs font-bold text-[#1E4632] focus:outline-none focus:border-[#2F6B4F]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fast Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-[#726C60] font-semibold">त्वरित दर:</span>
+                  {[
+                    { label: '50g = ₹10 (₹200/kg)', r50: '10', r100: '20' },
+                    { label: '50g = ₹15 (₹300/kg)', r50: '15', r100: '30' },
+                    { label: '50g = ₹20 (₹400/kg)', r50: '20', r100: '40' },
+                  ].map((p, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setLooseRatePer50g(p.r50);
+                        setLooseRatePer100g(p.r100);
+                      }}
+                      className="px-2 py-0.5 bg-[#FAF7F0] hover:bg-[#E7F0EA] text-[#262421] text-[10px] font-semibold rounded-md border border-[#E4DFD2] transition-colors"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 3. Stock Quantity & Alert */}
@@ -703,17 +1154,113 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-bold text-[#262421] mb-1">
-                {t.supplierNameLabel}
-              </label>
-              <input
-                type="text"
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                placeholder={t.supplierNamePlaceholder}
-                className="w-full h-11 px-3 rounded-xl border border-[#E4DFD2] bg-[#FAF7F0] text-sm text-[#262421] focus:outline-none focus:border-[#2F6B4F]"
-              />
+            {/* Wholesaler & Ordering Mode Section */}
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="block text-xs font-bold text-[#262421] mb-1">
+                  {t.wholesalerVendorLabel}
+                </label>
+                <input
+                  type="text"
+                  value={supplierName}
+                  onChange={(e) => setSupplierName(e.target.value)}
+                  placeholder={t.supplierNamePlaceholder}
+                  className="w-full h-11 px-3 rounded-xl border border-[#E4DFD2] bg-[#FAF7F0] text-sm text-[#262421] focus:outline-none focus:border-[#2F6B4F]"
+                />
+              </div>
+
+              {/* Quick Wholesaler presets */}
+              <div>
+                <span className="text-[11px] font-bold text-[#726C60] block mb-1">
+                  {t.suggestWholesaleSupplier}:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {DEFAULT_WHOLESALERS.slice(0, 4).map((w) => (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => {
+                        setSupplierName(w.name);
+                        setSupplierChannel(w.channel);
+                        setSupplierOrderMode(w.orderMode);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${
+                        supplierName === w.name
+                          ? 'bg-[#2F6B4F] text-white border-[#2F6B4F]'
+                          : 'bg-[#FAF7F0] border-[#E4DFD2] text-[#4A453C] hover:bg-[#E7F0EA]'
+                      }`}
+                    >
+                      {w.name.split(' (')[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Order Mode: Send Slip vs Daily Salesman */}
+              <div>
+                <label className="block text-xs font-bold text-[#262421] mb-1.5">
+                  {t.deliveryMethodLabel}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label
+                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                      supplierOrderMode === 'slip'
+                        ? 'border-[#8A5A00] bg-[#FFF8E7]'
+                        : 'border-[#E4DFD2] bg-white'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="orderMode"
+                      checked={supplierOrderMode === 'slip'}
+                      onChange={() => {
+                        setSupplierOrderMode('slip');
+                        if (supplierChannel === 'daily_salesman') {
+                          setSupplierChannel('ration_mandi');
+                        }
+                      }}
+                      className="mt-0.5 text-[#8A5A00] focus:ring-[#8A5A00]"
+                    />
+                    <div className="flex flex-col text-left">
+                      <span className="text-xs font-bold text-[#262421] flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm text-[#8A5A00]">receipt_long</span>
+                        <span>{t.methodSendSlip}</span>
+                      </span>
+                      <span className="text-[10px] text-[#726C60] leading-tight mt-0.5">
+                        राशन / सिगरेट (WhatsApp या पर्चा)
+                      </span>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                      supplierOrderMode === 'daily_salesman'
+                        ? 'border-[#1E4632] bg-[#EBF5EF]'
+                        : 'border-[#E4DFD2] bg-white'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="orderMode"
+                      checked={supplierOrderMode === 'daily_salesman'}
+                      onChange={() => {
+                        setSupplierOrderMode('daily_salesman');
+                        setSupplierChannel('daily_salesman');
+                      }}
+                      className="mt-0.5 text-[#1E4632] focus:ring-[#1E4632]"
+                    />
+                    <div className="flex flex-col text-left">
+                      <span className="text-xs font-bold text-[#262421] flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm text-[#1E4632]">local_shipping</span>
+                        <span>{t.methodDailySalesman}</span>
+                      </span>
+                      <span className="text-[10px] text-[#726C60] leading-tight mt-0.5">
+                        ब्रेड, बिस्कुट, चिप्स (दुकान पर आते हैं)
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
 

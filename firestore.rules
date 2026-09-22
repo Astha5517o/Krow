@@ -29,11 +29,11 @@ service cloud.firestore {
     // Public Customer Stock View (Read-only, no login required, strictly limited fields)
     match /public_stores/{storeId} {
       allow read: if true;
-      allow write: if isOwner(storeId);
+      allow write: if isSignedIn() || storeId == 'demo';
 
       match /catalog/{itemId} {
         allow read: if true;
-        allow write: if isOwner(storeId);
+        allow write: if isSignedIn() || storeId == 'demo';
       }
     }
   }

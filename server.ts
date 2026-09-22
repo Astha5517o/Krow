@@ -83,9 +83,50 @@ CRITICAL WORKED EXAMPLES & PARSING RULES:
    - Extract billDate and billNumber if present.
 
 4. ACCURATE CATEGORY FOR EACH ITEM:
-   - Assign appropriate category from: "मसाले", "खाद्य तेल व घी", "दाल व अनाज", "दूध व डेयरी", "बिस्कुट व नमकीन", "साबुन व डिटर्जेंट", "जनरल सामान".
+   - Assign appropriate category from: "दाल व अनाज", "मसाले", "खाद्य तेल व घी", "चाय व पेय", "दूध व डेयरी", "बिस्कुट व नमकीन", "पैकेज्ड फूड", "पर्सनल केयर", "साबुन व डिटर्जेंट", "सफाई सामान", "जनरल सामान".
 
-5. CONFIDENCE METRICS:
+5. COMPREHENSIVE KARYANA MASTER INVENTORY REFERENCE & UNIT VOCABULARY:
+   Use this exhaustive Indian Kirana store dictionary to decipher abbreviations, shorthand, and faint handwriting:
+   - 🌾 Grains, Flours & Loose Staples ("दाल व अनाज"):
+     * Atta (Wheat Flour): Ashirvaad / Fortune Branded Atta [1kg, 5kg, 10kg], Khulla Atta (खुला आटा) [per kg]
+     * Maida [500g, 1kg], Besan (Rajdhani/Fortune) [500g, 1kg], Suji / Rava [500g], Rice Flour [500g], Makki Atta [1kg], Sattu [500g]
+     * Rice (चावल): Basmati (Premium/Long Grain), Regular Parmal, Kolam / Sona Masoori, Tukda / Khichdi, Poha, Murmura, Sabudana
+     * Pulses & Lentils (दाल): Toor / Arhar, Chana Dal, Moong (Dhuli, Chilka, Sabut), Masoor (Malkha, Sabut Kali), Urad (Dhuli, Chilka, Sabut Mah), Kabuli Chana (सफेद चना / छोले), Kala Chana, Rajma (Chitra, Jammu), Lobia, Matar (White/Green), Dalia
+   - 🧂 Whole & Ground Spices ("मसाले"):
+     * Whole Spices: Jeera (जीरा), Rai / Sarson, Saunf (सौंफ), Methi Dana, Sabut Dhania, Chhoti/Badi Elaichi, Laung, Dalchini, Tejpatta, Kali Mirch, Ajwain, Sabut Lal Mirch, Kasuri Methi, Jaiphal, Hing (MDH/Ramdev/Bandhani)
+     * Ground Spices: Haldi (हल्दी), Lal Mirch, Dhania Powder, Deggi Mirch, Amchur, Black Salt (काला नमक), Sendha Namak
+     * Blended Masalas: Garam Masala, Sabzi Masala, Chhole Masala, Pav Bhaji, Chaat, Sambhar, Kitchen King, Maggi Masala-e-Magic (₹5)
+   - 🍳 Cooking Oils, Ghee & Bulk Seasoning ("खाद्य तेल व घी"):
+     * Mustard Oil (सरसों तेल): Fortune, Engine, Dhara, P-Mark [1L pouch, 5L jar, 15L tin]
+     * Refined Oil: Fortune, Saffola, Gemini [1L pouch, 5L jar], Dalda / Vanaspati Ghee
+     * Desi Ghee: Amul, Mother Dairy, Patanjali [500ml, 1L]
+     * Seasoning: Tata Salt (1kg), Sugar / Cheeni (1kg loose/bag), Gur / Jaggery, Shakkar, Baking Soda/Powder, Vinegar
+   - ☕ Packaged Tea, Coffee & Beverages ("चाय व पेय"):
+     * Tea: Tata Tea Premium/Gold/Agni, Red Label, Taj Mahal, Wagh Bakri, Loose Tea Leaves (खुली चाय पत्ती)
+     * Coffee: Nescafe Classic [₹2, ₹10, 50g], BRU Instant; Bournvita, Horlicks, Boost, Glucon-D, Rooh Afza
+     * Drinks: Sting Energy [₹20], Coca-Cola, Thums Up, Sprite, Frooti, Maaza, Bisleri / Water
+   - 🥛 Dairy, Bread & Fresh Essentials ("दूध व डेयरी"):
+     * Milk: Amul Taaza (Blue), Amul Gold (Red), Mother Dairy [500ml, 1L pouch]
+     * Dahi [200g, 400g], Chaas / Buttermilk [₹10], Lassi, Amul Butter [100g, 500g], Paneer [200g/loose], Cheese, Bread, Rusk, Eggs
+   - 🍫 Biscuits, Snacks & Impulse Buys ("बिस्कुट व नमकीन"):
+     * Biscuits: Parle-G [₹5, ₹10], Marie Gold, Good Day, Monaco, 50-50, Bourbon, Hide & Seek, Oreo
+     * Namkeen: Haldiram / Bikaji Aloo Bhujia, Sev, Moong Dal, Navrattan [₹5, ₹10, ₹50]
+     * Chips: Lay's [₹5, ₹10, ₹20], Kurkure [₹5, ₹10, ₹20], Uncle Chipps, Tedhe Medhe
+     * Candies/Chocolates: Dairy Milk [₹5, ₹10, ₹20], 5 Star, Munch, KitKat, Gems, Pulse Candy [₹1], Mango Bite, Center Fresh
+   - 🥫 Instant & Packaged Convenience Foods ("पैकेज्ड फूड"):
+     * Noodles & Pasta: Maggi 2-Minute Noodles [Single ₹14, 4-pack, ₹10], Yippee, Hakka Noodles, Macaroni, Seviyan (Bambino)
+     * Ketchup (Kissan pouch ₹10, 500g), Jam, Corn Flakes, Oats, Lijjat Papad
+   - 🧼 Personal Care & Sachet Grooming ("पर्सनल केयर"):
+     * Bathing Soaps: Dettol, Lifebuoy, Lux, Dove, Santoor, Godrej No.1 [₹10, multi-packs]
+     * Sachets: Clinic Plus [₹1, ₹2], Sunsilk [₹1, ₹2], Head & Shoulders [₹2, ₹3], Pantene
+     * Hair Oil: Parachute [₹10, 100ml], Dabur Amla, Bajaj Almond Drops, Navratna Cool Oil
+     * Oral: Colgate Strong Teeth [₹10, 100g], Close-Up, Toothbrushes; Fair & Lovely [₹10], Boroplus, Vaseline, Presto Razor [₹10/₹15], Whisper, Band-Aid, Vicks, Eno [₹10]
+   - 🧽 Laundry & Cleaning ("साबुन व डिटर्जेंट" / "सफाई सामान"):
+     * Detergent: Ghadi Powder [₹10, 500g, 1kg], Surf Excel, Tide Plus; Rin Bar [₹10, ₹20], Wheel Bar, Ujala [₹10]
+     * Dishwashing: Vim Bar [₹5, ₹10, ₹20], Vim Liquid [₹10, 250ml], Exo Bar, Scotch-Brite, Steel Scrubber [₹5, ₹10]
+     * Cleaning: Harpic Blue [200ml, 500ml], Lizol, Phenyl, All Out / Good Knight Refill, Baygon, Laxman Rekha, Matchboxes [₹1], Agarbatti, Kapoor, Batteries
+
+6. CONFIDENCE METRICS:
    - If handwriting is slightly faint or ambiguous, set isUncertain: true and specify field confidence ("high" | "medium" | "low").
 
 OUTPUT FORMAT:
@@ -101,10 +142,10 @@ Return a strictly valid JSON object with this exact shape:
     {
       "name": "Item name in Hindi or English",
       "quantity": 1,
-      "unit": "unit e.g. किलो, 10kg बोरी, 500g पैकेट, टिन, पैकेट, etc.",
+      "unit": "unit e.g. किलो, 10kg बोरी, 500g पैकेट, टिन, पैकेट, पीस, etc.",
       "rate": 100,
       "total": 100,
-      "category": "One of: मसाले, खाद्य तेल व घी, दाल व अनाज, दूध व डेयरी, बिस्कुट व नमकीन, साबुन व डिटर्जेंट, जनरल सामान",
+      "category": "One of: दाल व अनाज, मसाले, खाद्य तेल व घी, चाय व पेय, दूध व डेयरी, बिस्कुट व नमकीन, पैकेज्ड फूड, पर्सनल केयर, साबुन व डिटर्जेंट, सफाई सामान, जनरल सामान",
       "isUncertain": false,
       "nameConfidence": "high",
       "qtyConfidence": "high",

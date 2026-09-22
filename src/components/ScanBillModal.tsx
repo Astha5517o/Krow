@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { StockItem, Language, ScannedBillDraft, ScannedBillItem } from '../types';
 import { translations } from '../translations';
 import { localizeItemName, localizeUnit } from '../utils/localization';
-import { matchStockItem, inferCategory } from '../utils/stockMatcher';
+import { matchStockItem, inferCategory, matchMasterKaryanaItem } from '../utils/stockMatcher';
 import { preprocessBillImage } from '../utils/imagePreprocess';
 
 interface ScanBillModalProps {
@@ -70,6 +70,7 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({
   }): ScannedBillItem => {
     // Look for matching stock item using smart matcher
     const matched = matchStockItem(item.name, stockItems);
+    const masterMatch = !matched ? matchMasterKaryanaItem(item.name) : undefined;
 
     let rateComparison: 'fair' | 'cheaper' | 'costlier' | 'check' = 'fair';
     if (matched) {
@@ -88,10 +89,10 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({
       id: 'scanned-' + Math.random().toString(36).substr(2, 9),
       name: item.name,
       quantity: item.quantity,
-      unit: item.unit || 'पैकेट',
+      unit: item.unit || masterMatch?.unit || 'पैकेट',
       rate: item.rate,
       total: item.total || item.quantity * item.rate,
-      category: item.category || inferCategory(item.name),
+      category: item.category || masterMatch?.category || inferCategory(item.name),
       isUncertain: item.isUncertain || item.nameConfidence === 'low' || item.qtyConfidence === 'low' || item.rateConfidence === 'low',
       nameConfidence: item.nameConfidence || (item.isUncertain ? 'low' : 'high'),
       qtyConfidence: item.qtyConfidence || (item.isUncertain ? 'low' : 'high'),
@@ -99,6 +100,8 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({
       matchedItemId: matched?.id,
       existingBuyRate: matched?.buyPrice,
       existingSellRate: matched?.sellPrice,
+      suggestedSellRate: masterMatch?.sellPrice,
+      matchedMasterName: masterMatch?.name,
       rateComparison,
     };
   };
@@ -727,6 +730,16 @@ export const ScanBillModal: React.FC<ScanBillModalProps> = ({
                                 ) : (
                                   <span className="text-[10px] font-bold text-[#7a5900] bg-[#FBF0D9] px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
                                     + नया आइटम
+                                  </span>
+                                )}
+
+                                {!item.matchedItemId && item.matchedMasterName && (
+                                  <span
+                                    className="text-[10px] font-bold text-[#1E4632] bg-[#E7F0EA] border border-[#2F6B4F]/30 px-1.5 py-0.5 rounded-md flex items-center gap-1"
+                                    title="किराना मास्टर कैटलॉग से सुझाया गया बिक्री भाव"
+                                  >
+                                    <span className="material-symbols-outlined text-[11px] text-[#2F6B4F]">auto_awesome</span>
+                                    <span>MRP भाव: ₹{item.suggestedSellRate}</span>
                                   </span>
                                 )}
 

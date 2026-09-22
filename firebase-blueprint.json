@@ -10,6 +10,11 @@
         "storeType": { "type": "string", "enum": ["kirana", "stationery"] },
         "ownerName": { "type": "string", "maxLength": 100 },
         "phone": { "type": "string", "maxLength": 20 },
+        "email": { "type": "string" },
+        "registeredAt": { "type": "string" },
+        "lastLoginAt": { "type": "string" },
+        "lastLoginProvider": { "type": "string" },
+        "loginCount": { "type": "number" },
         "createdAt": { "type": "string" }
       },
       "required": ["shopName", "language", "storeType"]
@@ -118,12 +123,32 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["name", "category", "status"]
+    },
+    "UserLoginInfo": {
+      "title": "User Login Record",
+      "description": "Information tracking user login sessions, timestamps, and auth provider",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["register", "login"] },
+        "timestamp": { "type": "number" },
+        "isoTime": { "type": "string" },
+        "provider": { "type": "string" },
+        "email": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["timestamp", "isoTime", "provider"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "Shop profile and settings for the authenticated shopkeeper"
+    },
+    "/users/{userId}/logins/{loginId}": {
+      "schema": "UserLoginInfo",
+      "description": "Login history and access logs for the user"
     },
     "/users/{userId}/items/{itemId}": {
       "schema": "StockItem",
@@ -136,6 +161,10 @@
     "/users/{userId}/customers/{customerId}/transactions/{transactionId}": {
       "schema": "Transaction",
       "description": "Credit and repayment transactions for a customer"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Customer transactions belonging to the shopkeeper"
     },
     "/users/{userId}/sales/{saleId}": {
       "schema": "SaleRecord",
