@@ -35,7 +35,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ language, onSuccess, onClo
         if (isNewUser) {
           await recordUserRegistration(u.uid, {
             email: u.email || '',
-            shopName: u.displayName ? `${u.displayName} की दुकान` : 'मेरी दुकान',
+            shopName: u.displayName ? `${u.displayName} की दुकान` : 'Krōw Store',
             ownerName: u.displayName || '',
             language,
             provider: 'google.com',
@@ -110,8 +110,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ language, onSuccess, onClo
           </h2>
           <p className="text-xs text-[#726C60] mt-1.5 max-w-xs leading-relaxed">
             {language === 'en'
-              ? 'One-click sign-in to securely save your shop inventory, khata, and udhaar in your personal cloud account.'
-              : '1-क्लिक में सुरक्षित लॉगिन। आपका स्टॉक, बही-खाता और उधारी डेटा हमेशा आपके निजी खाते में सुरक्षित रहेगा।'}
+              ? 'One-click sign-in to securely save and access your shop inventory, khata, and udhaar anywhere.'
+              : '1-क्लिक में सुरक्षित लॉगिन। आपका स्टॉक, बही-खाता और उधारी डेटा हमेशा सुरक्षित रहेगा।'}
           </p>
         </div>
 
@@ -199,8 +199,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ language, onSuccess, onClo
               </span>
               <span>
                 {language === 'en'
-                  ? '100% Free & automatic cloud backup on Firestore'
-                  : '100% मुफ़्त और स्वचालित क्लाउड बैकअप'}
+                  ? 'Automatic real-time sync & continuous data safety'
+                  : 'स्वचालित ऑटो-सिंक और स्थायी डेटा सुरक्षा'}
               </span>
             </div>
 

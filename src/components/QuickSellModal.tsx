@@ -7,6 +7,7 @@ import { safeStopScanner } from '../utils/scannerUtils';
 import { searchKaryanaMaster, KaryanaMasterItem } from '../data/karyanaMasterCatalog';
 import { searchStationeryMaster } from '../data/stationeryMasterCatalog';
 import { lookupMasterBarcode, normalizeBarcode } from '../data/masterBarcodes';
+import { resolveProductByBarcode } from '../services/barcodeLookupService';
 import { LooseWeightSellModal } from './LooseWeightSellModal';
 
 interface QuickSellModalProps {
@@ -27,6 +28,7 @@ interface QuickSellModalProps {
     amount: number,
     note: string
   ) => void;
+  onAddMasterItemToStock?: (itemData: Omit<StockItem, 'id' | 'createdAt'>) => StockItem;
   onClose: () => void;
   onSwitchToScanToSell?: () => void;
 }
@@ -40,6 +42,7 @@ export const QuickSellModal: React.FC<QuickSellModalProps> = ({
   onRecordSale,
   onConfirmCartSale,
   onAddUdhaarTransaction,
+  onAddMasterItemToStock,
   onClose,
   onSwitchToScanToSell,
 }) => {
@@ -89,6 +92,8 @@ export const QuickSellModal: React.FC<QuickSellModalProps> = ({
   // Barcode Camera Scanner inside Counter POS
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isResolvingBarcode, setIsResolvingBarcode] = useState(false);
+  const [autoAddedToast, setAutoAddedToast] = useState<{ name: string; price: number; quantity?: number } | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const qrRegionId = 'counter-pos-camera-region';
 
@@ -194,7 +199,11 @@ export const QuickSellModal: React.FC<QuickSellModalProps> = ({
   const handleAddItemToCounter = (item: StockItem, qtyToAdd = 1) => {
     playScanBeep();
     setCart((prev) => {
-      const existingIdx = prev.findIndex((ci) => ci.item.id === item.id);
+      const existingIdx = prev.findIndex(
+        (ci) =>
+          ci.item.id === item.id ||
+          (item.barcode && ci.item.barcode && ci.item.barcode === item.barcode)
+      );
       if (existingIdx >= 0) {
         const updated = [...prev];
         const current = updated[existingIdx];
@@ -224,6 +233,107 @@ export const QuickSellModal: React.FC<QuickSellModalProps> = ({
         ];
       }
     });
+  };
+
+  const lastScannedBarcodeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
+
+  // Intelligent Universal Barcode Processing
+  // Guarantees all product details (name, MRP, category, unit, wholesale price)
+  // are auto-resolved and automatically added to the counter bill!
+  const handleProcessScannedBarcode = async (rawCode: string) => {
+    const clean = rawCode.trim();
+    if (!clean) return;
+
+    const now = Date.now();
+    if (lastScannedBarcodeRef.current.code === clean && now - lastScannedBarcodeRef.current.time < 1200) {
+      return; // Debounce rapid multi-frames of same barcode
+    }
+    lastScannedBarcodeRef.current = { code: clean, time: now };
+
+    const normScan = normalizeBarcode(clean);
+
+    // 1. Look up matching item in shop's existing stock
+    const match = stockItems.find(
+      (i) => i.barcode === clean || (i.barcode && normalizeBarcode(i.barcode) === normScan)
+    );
+
+    if (match) {
+      handleAddItemToCounter(match, 1);
+      setAutoAddedToast({ name: match.name, price: match.sellPrice });
+      setTimeout(() => setAutoAddedToast(null), 2500);
+      return;
+    }
+
+    // 2. Look up matching product in Master Catalog (e.g. Parle-G, Kurkure, Lays, Maggi)
+    const masterMatch = lookupMasterBarcode(clean);
+    if (masterMatch) {
+      const itemData: Omit<StockItem, 'id' | 'createdAt'> = {
+        name: language === 'en' ? (masterMatch.nameEn || masterMatch.name) : masterMatch.name,
+        category: masterMatch.category,
+        unit: masterMatch.unit || 'पैकेट',
+        barcode: masterMatch.barcode || clean,
+        buyPrice: masterMatch.buyPrice || Math.round(masterMatch.sellPrice * 0.85),
+        sellPrice: masterMatch.sellPrice,
+        currentQuantity: 20,
+        reorderLevel: 5,
+        isPerishable: false,
+        exchangeType: 'none',
+      };
+
+      let finalItem: StockItem;
+      if (onAddMasterItemToStock) {
+        finalItem = onAddMasterItemToStock(itemData);
+      } else {
+        finalItem = {
+          ...itemData,
+          id: 'item-master-' + clean.replace(/\D/g, '') + '-' + Date.now(),
+          createdAt: new Date().toISOString(),
+        };
+      }
+      handleAddItemToCounter(finalItem, 1);
+      setAutoAddedToast({ name: finalItem.name, price: finalItem.sellPrice });
+      setTimeout(() => setAutoAddedToast(null), 2500);
+      return;
+    }
+
+    // 3. Universal Resolution (Server AI / OpenFoodFacts + Indian Manufacturer Rules)
+    // Never prompts the user to type details manually!
+    try {
+      setIsResolvingBarcode(true);
+      const resolved = await resolveProductByBarcode(clean, stockItems);
+      setIsResolvingBarcode(false);
+
+      if (resolved) {
+        const itemData: Omit<StockItem, 'id' | 'createdAt'> = {
+          name: language === 'en' ? (resolved.nameEn || resolved.name) : resolved.name,
+          category: resolved.category || 'पैकेज्ड फूड',
+          unit: resolved.unit || 'पैकेट',
+          barcode: clean,
+          buyPrice: resolved.buyPrice || Math.round((resolved.sellPrice || 20) * 0.85),
+          sellPrice: resolved.sellPrice || 20,
+          currentQuantity: 20,
+          reorderLevel: 5,
+          isPerishable: false,
+          exchangeType: 'none',
+        };
+
+        let finalItem: StockItem;
+        if (onAddMasterItemToStock) {
+          finalItem = onAddMasterItemToStock(itemData);
+        } else {
+          finalItem = {
+            ...itemData,
+            id: 'item-auto-' + clean.replace(/\D/g, '') + '-' + Date.now(),
+            createdAt: new Date().toISOString(),
+          };
+        }
+        handleAddItemToCounter(finalItem, 1);
+        setAutoAddedToast({ name: finalItem.name, price: finalItem.sellPrice });
+        setTimeout(() => setAutoAddedToast(null), 2500);
+      }
+    } catch {
+      setIsResolvingBarcode(false);
+    }
   };
 
   // Update Item Quantity in Cart
@@ -335,46 +445,7 @@ export const QuickSellModal: React.FC<QuickSellModalProps> = ({
 
     const handleQuickScan = (decodedText: string) => {
       if (!isSubscribed) return;
-      const clean = decodedText.trim();
-      const normScan = normalizeBarcode(clean);
-
-      // 1. Look up matching item in shop's existing stock
-      const match = stockItems.find(
-        (i) => i.barcode === clean || (i.barcode && normalizeBarcode(i.barcode) === normScan)
-      );
-
-      if (match) {
-        handleAddItemToCounter(match, 1);
-        return;
-      }
-
-      // 2. Look up matching product in Master Catalog (e.g. Parle-G, Kurkure, Lays, Maggi)
-      const masterMatch = lookupMasterBarcode(clean);
-      if (masterMatch) {
-        playScanBeep();
-        const masterItem: StockItem = {
-          id: 'item-master-' + Date.now(),
-          name: language === 'en' ? masterMatch.nameEn : masterMatch.name,
-          category: masterMatch.category,
-          unit: masterMatch.unit,
-          barcode: masterMatch.barcode,
-          buyPrice: masterMatch.buyPrice,
-          sellPrice: masterMatch.sellPrice,
-          currentQuantity: 20,
-          reorderLevel: 5,
-          isPerishable: false,
-          exchangeType: 'none',
-          createdAt: new Date().toISOString(),
-        };
-        handleAddItemToCounter(masterItem, 1);
-        return;
-      }
-
-      // 3. Unrecognized Barcode: Prompt to name the item instead of dumping raw serial numbers
-      playScanBeep();
-      setCustomItemName('');
-      setCustomItemPrice('10');
-      setShowCustomModal(true);
+      handleProcessScannedBarcode(decodedText);
     };
 
     qrScanner
@@ -404,6 +475,44 @@ export const QuickSellModal: React.FC<QuickSellModalProps> = ({
       }
     };
   }, [cameraActive, stockItems]);
+
+  // Global Hardware USB / Bluetooth Barcode Scanner Gun Listener
+  useEffect(() => {
+    let keyBuffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      const isInput =
+        activeElement &&
+        (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
+
+      const currentTime = Date.now();
+      const timeDiff = currentTime - lastKeyTime;
+      lastKeyTime = currentTime;
+
+      // Enter key signals end of barcode from scanner gun
+      if (e.key === 'Enter') {
+        if (keyBuffer.length >= 6) {
+          e.preventDefault();
+          handleProcessScannedBarcode(keyBuffer);
+          keyBuffer = '';
+        }
+        return;
+      }
+
+      // If typed quickly (< 60ms) or not inside another text input, buffer it
+      if (e.key.length === 1 && (!isInput || timeDiff < 60)) {
+        if (timeDiff > 250) {
+          keyBuffer = ''; // Reset buffer if pause between keystrokes was too long
+        }
+        keyBuffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [stockItems, language]);
 
   // Finalize Sale (Fast Checkout)
   const handleFinalizeSale = () => {
@@ -680,6 +789,33 @@ export const QuickSellModal: React.FC<QuickSellModalProps> = ({
                   </div>
                 </div>
 
+                {/* Auto-Add Toast Banner */}
+                {autoAddedToast && (
+                  <div className="bg-[#1E4632] text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between shadow-md transition-all animate-bounce">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-sm text-[#A3D9B5]">check_circle</span>
+                      <span>
+                        {language === 'en'
+                          ? `✓ Auto-added: ${autoAddedToast.name} (₹${autoAddedToast.price})`
+                          : `✓ स्वतः काउंटर लिस्ट में जोड़ा: ${autoAddedToast.name} (₹${autoAddedToast.price})`}
+                      </span>
+                    </div>
+                    <span className="text-[10px] bg-[#2F6B4F] px-1.5 py-0.5 rounded text-[#E7F0EA]">1 Qty</span>
+                  </div>
+                )}
+
+                {/* Barcode Resolving Spinner */}
+                {isResolvingBarcode && (
+                  <div className="bg-[#E7F0EA] border border-[#2F6B4F] text-[#1E4632] px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 animate-pulse">
+                    <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+                    <span>
+                      {language === 'en'
+                        ? 'Resolving barcode & fetching product details automatically...'
+                        : 'बारकोड से सामान की पूरी जानकारी स्वतः लोड हो रही है...'}
+                    </span>
+                  </div>
+                )}
+
                 {/* Search Bar */}
                 <div className="relative">
                   <span className="material-symbols-outlined absolute left-3 top-2.5 text-[#726C60] text-lg">
@@ -690,7 +826,34 @@ export const QuickSellModal: React.FC<QuickSellModalProps> = ({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="सामान का नाम या बारकोड टाइप करें..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const q = searchQuery.trim();
+                        if (!q) return;
+                        // If it's a barcode (e.g. 5+ numbers)
+                        if (/^\d{5,}$/.test(q)) {
+                          handleProcessScannedBarcode(q);
+                          setSearchQuery('');
+                          return;
+                        }
+                        // If filtered stock has an exact match or single match
+                        if (filteredItems.length === 1) {
+                          handleAddItemToCounter(filteredItems[0], 1);
+                          setSearchQuery('');
+                          return;
+                        }
+                        if (filteredItems.length > 0) {
+                          handleAddItemToCounter(filteredItems[0], 1);
+                          setSearchQuery('');
+                        }
+                      }
+                    }}
+                    placeholder={
+                      language === 'en'
+                        ? 'Type item name or barcode / scan with gun...'
+                        : 'सामान का नाम या बारकोड टाइप करें / गन से स्कैन करें...'
+                    }
                     className="w-full h-10 pl-9 pr-8 rounded-xl bg-[#FAF7F0] border border-[#E4DFD2] text-xs text-[#262421] font-medium placeholder-[#726C60] focus:outline-none focus:border-[#1E4632] transition-colors"
                   />
                   {searchQuery && (

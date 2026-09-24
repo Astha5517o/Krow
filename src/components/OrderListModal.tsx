@@ -31,7 +31,7 @@ type ViewMode = 'list' | 'slip';
 export const OrderListModal: React.FC<OrderListModalProps> = ({
   language,
   stockItems,
-  shopName = 'मेरी दुकान (Krōw Store)',
+  shopName = 'Krōw Retail POS',
   ownerName,
   phone,
   onClose,

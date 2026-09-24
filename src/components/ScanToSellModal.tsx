@@ -4,6 +4,7 @@ import { StockItem, Language, CartItem } from '../types';
 import { playScanBeep, playSuccessChime } from '../utils/audio';
 import { safeStopScanner } from '../utils/scannerUtils';
 import { lookupMasterBarcode, MasterProduct } from '../data/masterBarcodes';
+import { resolveProductByBarcode } from '../services/barcodeLookupService';
 import { LooseWeightSellModal } from './LooseWeightSellModal';
 
 export type { CartItem };
@@ -60,6 +61,7 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
   // Rapid Scan Mode: When active, immediately adds +1 to cart on scan with instant sound/haptic
   const [rapidMode, setRapidMode] = useState(false);
   const [rapidScanBanner, setRapidScanBanner] = useState<{ name: string; price: number } | null>(null);
+  const [isResolvingBarcode, setIsResolvingBarcode] = useState(false);
 
   // Test simulation dropdown (discreet, no screen clutter)
   const [showTestDropdown, setShowTestDropdown] = useState(false);
@@ -162,7 +164,7 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
   };
 
   // Process a scanned code (from camera, manual entry, or physical barcode gun)
-  const handleBarcodeScanned = (rawCode: string) => {
+  const handleBarcodeScanned = async (rawCode: string) => {
     const code = rawCode.trim();
     if (!code) return;
 
@@ -204,20 +206,34 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
       return;
     }
 
-    // 2. Check in Central Master Barcode Catalog (Maggi, Coke, Thums Up, Lay's, etc.)
-    const masterMatch = lookupMasterBarcode(code);
-    if (masterMatch) {
+    // 2. Universal Barcode Resolution (Master Catalog + AI / OpenFoodFacts + Indian FMCG Rules)
+    // Instantly resolves product name, category, unit, MRP, and buy price
+    let productMatch: MasterProduct | null | undefined = lookupMasterBarcode(code);
+
+    if (!productMatch) {
+      try {
+        setIsResolvingBarcode(true);
+        productMatch = await resolveProductByBarcode(code, stockItems);
+      } catch {
+        // fallback
+      } finally {
+        setIsResolvingBarcode(false);
+      }
+    }
+
+    if (productMatch) {
+      const match = productMatch;
       if (rapidModeRef.current) {
         // Automatically add recognized master product to stock & cart
         let createdItem: StockItem;
         if (onAddMasterItemToStock) {
           createdItem = onAddMasterItemToStock({
-            name: language === 'en' ? masterMatch.nameEn : masterMatch.name,
-            category: masterMatch.category,
-            unit: masterMatch.unit || 'पैकेट',
+            name: language === 'en' ? (match.nameEn || match.name) : match.name,
+            category: match.category,
+            unit: match.unit || 'पैकेट',
             barcode: code,
-            buyPrice: masterMatch.buyPrice || Math.round(masterMatch.sellPrice * 0.85),
-            sellPrice: masterMatch.sellPrice,
+            buyPrice: match.buyPrice || Math.round(match.sellPrice * 0.85),
+            sellPrice: match.sellPrice,
             currentQuantity: 20,
             reorderLevel: 5,
             isPerishable: false,
@@ -226,12 +242,12 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
         } else {
           createdItem = {
             id: 'item-master-' + Date.now(),
-            name: language === 'en' ? masterMatch.nameEn : masterMatch.name,
-            category: masterMatch.category,
-            unit: masterMatch.unit || 'पैकेट',
+            name: language === 'en' ? (match.nameEn || match.name) : match.name,
+            category: match.category,
+            unit: match.unit || 'पैकेट',
             barcode: code,
-            buyPrice: masterMatch.buyPrice || Math.round(masterMatch.sellPrice * 0.85),
-            sellPrice: masterMatch.sellPrice,
+            buyPrice: match.buyPrice || Math.round(match.sellPrice * 0.85),
+            sellPrice: match.sellPrice,
             currentQuantity: 20,
             reorderLevel: 5,
             isPerishable: false,
@@ -241,12 +257,12 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
         }
         addItemToCart(createdItem, 1);
         setRapidScanBanner({ name: createdItem.name, price: createdItem.sellPrice });
-        setTimeout(() => setRapidScanBanner(null), 2000);
+        setTimeout(() => setRapidScanBanner(null), 2500);
         return;
       }
 
       setMatchedMasterProduct({
-        product: masterMatch,
+        product: match,
         barcode: code,
       });
       setScannedMatchedItem(null);
@@ -254,7 +270,7 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
       return;
     }
 
-    // 3. Unrecognized barcode: prompt shopkeeper with instant naming form (never leave as serial number)
+    // 3. Fallback only if resolution returned empty
     setUnrecognizedBarcode(code);
     setNewQuickItemName('');
     setNewQuickItemPrice('10');
@@ -1009,6 +1025,18 @@ export const ScanToSellModal: React.FC<ScanToSellModalProps> = ({
                     <div className="w-full h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_8px_#10B981] animate-pulse" />
                   </div>
                 </div>
+
+                {/* Barcode Resolving Spinner Overlay */}
+                {isResolvingBarcode && (
+                  <div className="absolute top-3 left-3 right-3 bg-emerald-900/90 backdrop-blur-xs border border-emerald-400/50 text-emerald-100 px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg animate-pulse z-30">
+                    <div className="w-3.5 h-3.5 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin shrink-0" />
+                    <span className="truncate">
+                      {language === 'en'
+                        ? 'Scanning barcode & auto-filling product details...'
+                        : 'बारकोड से सामान की पूरी जानकारी स्वतः लोड हो रही है...'}
+                    </span>
+                  </div>
+                )}
 
                 {/* Rapid Scan Toast Overlay */}
                 {rapidScanBanner && (

@@ -17,7 +17,7 @@ interface KrowWelcomeFirstViewProps {
 export const KrowWelcomeFirstView: React.FC<KrowWelcomeFirstViewProps> = ({
   currentLanguage,
   currentStoreType,
-  shopName = 'मेरी दुकान',
+  shopName = 'Krōw POS',
   onOpenShop,
   isModal = false,
   onClose,

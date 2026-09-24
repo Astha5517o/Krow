@@ -176,7 +176,7 @@ export async function getPublicStoreCatalog(
   return {
     store: {
       storeId,
-      shopName: 'मेरी दुकान',
+      shopName: 'Krōw Demo Store',
       storeType: 'kirana',
       phone: '',
       itemCount: defaultSanitized.length,

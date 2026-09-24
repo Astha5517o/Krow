@@ -78,69 +78,6 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   return (
     <div id="home-dashboard-container" className="flex flex-col gap-4 pb-24 animate-fade-in">
-      {/* 0. CLOUD DATABASE SYNC STATUS BANNER (100% FREE FIREBASE SPARK PLAN) */}
-      {currentUser ? (
-        <div className="bg-[#E7F0EA]/90 border border-[#2F6B4F]/25 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 shadow-2xs">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-[#2F6B4F] text-white flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-[18px]">cloud_done</span>
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-[#1E4632] truncate flex items-center gap-1.5">
-                <span>{currentUser.email || currentUser.displayName || 'दुकानदार'}</span>
-                <span className="text-[10px] font-extrabold text-[#2F6B4F] bg-white px-1.5 py-0.2 rounded border border-[#2F6B4F]/20">
-                  {language === 'en' ? 'Saved to Cloud' : 'क्लाउड में सुरक्षित'}
-                </span>
-              </div>
-              <div className="text-[11px] text-[#2F6B4F]/90 font-medium flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#2F6B4F] animate-pulse"></span>
-                <span>
-                  {language === 'en'
-                    ? '100% Free Version (Firebase Spark Plan • Instant Sync)'
-                    : '100% मुफ़्त वर्ज़न (Firebase Spark Plan • तुरंत सेव)'}
-                </span>
-              </div>
-            </div>
-          </div>
-          <span className="text-[10px] font-extrabold text-[#2F6B4F] bg-white px-2 py-1 rounded-full border border-[#2F6B4F]/25 flex-shrink-0 flex items-center gap-1 shadow-2xs">
-            <span className="material-symbols-outlined text-[13px] text-[#2F6B4F]">verified</span>
-            <span>{language === 'en' ? 'Free Spark' : 'मुफ़्त वर्ज़न'}</span>
-          </span>
-        </div>
-      ) : (
-        <div className="bg-white border border-[#E4DFD2] rounded-2xl p-3 shadow-2xs flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-[#E7F0EA] text-[#2F6B4F] flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-lg">cloud_upload</span>
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-[#262421] flex items-center gap-1.5">
-                <span>{language === 'en' ? 'Free Cloud Database' : 'मुफ़्त क्लाउड डेटाबेस बैकअप'}</span>
-                <span className="text-[10px] font-bold text-[#2F6B4F] bg-[#E7F0EA] px-1.5 py-0.2 rounded">
-                  100% Free
-                </span>
-              </div>
-              <div className="text-[11px] text-[#726C60] truncate">
-                {language === 'en'
-                  ? 'Sign in to save your stock & udhaar under your personal account (Spark Plan - No charges)'
-                  : 'लॉगिन करें ताकि आपका स्टॉक व खाता हमेशा आपके खाते में सुरक्षित रहे (कोई शुल्क नहीं)'}
-              </div>
-            </div>
-          </div>
-          {onOpenAuth && (
-            <button
-              type="button"
-              id="home-login-db-btn"
-              onClick={onOpenAuth}
-              className="px-3 py-1.5 rounded-xl bg-[#2F6B4F] hover:bg-[#1E4632] text-white text-xs font-bold transition-all shadow-2xs active:scale-95 flex-shrink-0 cursor-pointer flex items-center gap-1"
-            >
-              <span className="material-symbols-outlined text-sm">login</span>
-              <span>{language === 'en' ? 'Sign In' : 'लॉगिन करें'}</span>
-            </button>
-          )}
-        </div>
-      )}
-
       {/* 1. HERO CARD: Net Profit Hero (Stitch Screen 18) */}
       <div id="profit-hero-card" className="bg-[#E7F0EA] border border-[#2F6B4F]/20 rounded-3xl p-5 shadow-xs relative overflow-hidden">
         <div className="flex items-center justify-between mb-2">

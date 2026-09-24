@@ -1,42 +1,64 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="krowBg" x1="256" y1="0" x2="256" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1E4632"/>
-      <stop offset="100%" stop-color="#122F22"/>
+    <!-- Deep Obsidian Forest Gradient (Executive Retail Palette) -->
+    <linearGradient id="krowBgGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#092719"/>
+      <stop offset="55%" stop-color="#051910"/>
+      <stop offset="100%" stop-color="#020E08"/>
     </linearGradient>
-    <filter id="krowSoftDrop" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0B1C14" flood-opacity="0.3"/>
+
+    <!-- Ascending Primary Flight Wing (Growth & Velocity) -->
+    <linearGradient id="krowWingGrad" x1="200" y1="230" x2="400" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="50%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#34D399"/>
+    </linearGradient>
+
+    <!-- Lower Wing & Tail Feathers (Platinum Balance & Stability) -->
+    <linearGradient id="krowTailGrad" x1="200" y1="280" x2="370" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E8F1EC"/>
+      <stop offset="100%" stop-color="#A5C7B4"/>
+    </linearGradient>
+
+    <!-- Subtle Soft Ambient Elevation Shadow -->
+    <filter id="krowEmblemShadow" x="-12%" y="-12%" width="124%" height="124%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000000" flood-opacity="0.45"/>
     </filter>
   </defs>
 
-  <!-- Background Squircle -->
-  <rect width="512" height="512" rx="112" fill="url(#krowBg)"/>
-  <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#2F6B4F" stroke-width="4" stroke-opacity="0.4"/>
+  <!-- Architectural Squircle Container (Golden Ratio Geometry) -->
+  <rect width="512" height="512" rx="128" fill="url(#krowBgGrad)"/>
+  <rect x="2.5" y="2.5" width="507" height="507" rx="125.5" fill="none" stroke="#22593D" stroke-width="3" stroke-opacity="0.6"/>
+  <!-- Specular Top Rim Highlight -->
+  <path d="M128 3.5 H384 C454 3.5 508.5 58 508.5 128" stroke="rgba(255,255,255,0.22)" stroke-width="2.5" fill="none"/>
 
-  <!-- Master Krōw Sprout Emblem -->
-  <g filter="url(#krowSoftDrop)">
-    <!-- Central Stem -->
+  <!-- Master Krōw Geometric Emblem (Corvid Monogram & Sovereign Retail Mark) -->
+  <g filter="url(#krowEmblemShadow)">
+    <!-- 1. The Monolith Ledger Pillar (Architectural Anchor & Spine of K) -->
+    <rect x="100" y="88" width="68" height="336" rx="34" fill="#FFFFFF"/>
+
+    <!-- 2. Primary Ascending Flight Wing (Top Arm of K — Emerald Growth Vector) -->
     <path
-      d="M256 416V208"
-      stroke="#E8F2EC"
-      stroke-width="36"
-      stroke-linecap="round"
+      d="M208 196 L356 74 C370 62 392 68 400 86 C406 100 400 114 386 124 L276 220 C258 236 228 238 208 226 Z"
+      fill="url(#krowWingGrad)"
     />
-    <!-- Left Leaf (Deep Sprout Green) -->
+
+    <!-- 3. The Raven Head & Razor Beak (Vigilant Core & Center of K) -->
     <path
-      d="M256 288C184 288 128 240 128 168C200 168 256 216 256 288Z"
-      fill="#3FA369"
-      stroke="#E8F2EC"
-      stroke-width="24"
-      stroke-linejoin="round"
+      d="M196 212 C236 200 282 202 316 212 L394 238 L318 264 C280 274 236 274 196 264 Z"
+      fill="#FFFFFF"
     />
-    <!-- Right Leaf (Fresh Sage Green) -->
+
+    <!-- The Observant Corvid Eye (Golden Amber Iris, Dark Pupil, Specular Catchlight) -->
+    <circle cx="294" cy="238" r="13" fill="#D97706"/>
+    <circle cx="294" cy="238" r="11" fill="#F59E0B"/>
+    <circle cx="295" cy="238" r="5.5" fill="#061C12"/>
+    <circle cx="297.5" cy="235.5" r="2.2" fill="#FFFFFF"/>
+
+    <!-- 4. Lower Gliding Tail Wing (Bottom Arm of K — Platinum Grounding Balance) -->
     <path
-      d="M256 240C256 168 312 120 384 120C384 192 328 240 256 240Z"
-      fill="#6BC58D"
-      stroke="#E8F2EC"
-      stroke-width="24"
-      stroke-linejoin="round"
+      d="M208 274 C228 266 256 268 272 280 L368 394 C380 408 376 428 360 436 C346 442 332 438 322 426 L208 298 Z"
+      fill="url(#krowTailGrad)"
     />
   </g>
 </svg>

@@ -39,57 +39,81 @@ export const Header: React.FC<HeaderProps> = ({
     ja: '日本語',
   };
 
-  return (
-    <header className="fixed top-0 left-0 right-0 z-40 bg-[#FAF7F0]/95 backdrop-blur-md border-b border-[#E4DFD2] shadow-xs">
-      <div className="max-w-md mx-auto h-16 px-4 flex items-center justify-between gap-2">
-        {/* Logo & Store Name */}
-        <div className="flex items-center gap-2 min-w-0">
-          <AppLogo
-            size="sm"
-            showText={true}
-            onClick={onOpenWelcome}
-          />
+  // Strictly enforce privacy: before login, NEVER show personal name or personal shop
+  const isAuthenticated = Boolean(currentUser);
+  const headerTitle = isAuthenticated
+    ? (profile.shopName || (currentUser?.displayName ? `${currentUser.displayName} की दुकान` : t[storeConfig.titleKey]))
+    : 'Krōw POS';
 
+  const headerSubtitle = isAuthenticated
+    ? `${t[storeConfig.titleKey]}`
+    : `${t[storeConfig.titleKey]} • ${profile.language === 'en' ? 'Demo' : 'डेमो'}`;
+
+  return (
+    <header className="fixed top-0 left-0 right-0 z-40 bg-[#FAF7F0]/95 backdrop-blur-md border-b border-[#E4DFD2] shadow-2xs">
+      <div className="max-w-md mx-auto h-14 px-3 flex items-center justify-between gap-2">
+        {/* Left: Brand & Store Identity (Android 56dp standard ratio) */}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {/* Executive Krōw Brand Emblem Button */}
           <button
-            onClick={onOpenStoreSelect}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-[#E4DFD2] hover:bg-[#E7F0EA] transition-colors min-w-0 shadow-2xs"
+            onClick={onOpenWelcome}
+            className="flex-shrink-0 cursor-pointer active:scale-95 transition-transform"
+            title="Krōw Retail POS"
             type="button"
-            title={t[storeConfig.titleKey]}
+            aria-label="Krōw POS"
           >
-            {profile.logoUrl ? (
+            <AppLogo size="sm" showText={false} />
+          </button>
+
+          {/* Store Category / Personalize Pill */}
+          <button
+            id="header-shop-selector-btn"
+            onClick={isAuthenticated ? onOpenProfile : onOpenStoreSelect}
+            className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-white hover:bg-[#F3EFE6] border border-[#E4DFD2] transition-all min-w-0 text-left shadow-2xs active:scale-[0.98] cursor-pointer"
+            type="button"
+            title={headerTitle}
+          >
+            {isAuthenticated && profile.logoUrl ? (
               <img
                 src={profile.logoUrl}
                 alt="Shop Logo"
-                className="w-4 h-4 rounded-full object-cover flex-shrink-0 border border-[#E4DFD2]"
+                className="w-6 h-6 rounded-lg object-cover flex-shrink-0 border border-[#E4DFD2]"
               />
             ) : (
-              <span className="material-symbols-outlined text-[15px] text-[#2F6B4F] flex-shrink-0">
-                {storeConfig.icon}
+              <span className="w-6 h-6 rounded-lg bg-[#E4EFE8] text-[#0A2719] flex items-center justify-center text-xs flex-shrink-0 font-bold">
+                <span className="material-symbols-outlined text-[15px]">{storeConfig.icon}</span>
               </span>
             )}
-            <span className="font-bold text-xs sm:text-sm text-[#262421] truncate max-w-[90px] sm:max-w-[130px]">
-              {profile.shopName || t[storeConfig.titleKey]}
-            </span>
-            <span className="material-symbols-outlined text-[#726C60] text-[16px]">
-              expand_more
-            </span>
+
+            <div className="min-w-0 flex flex-col justify-center">
+              <span className="font-extrabold text-xs sm:text-[13px] text-[#1C1B1A] truncate max-w-[110px] xs:max-w-[140px] leading-tight">
+                {headerTitle}
+              </span>
+              <span className="text-[10px] text-[#5C6460] font-semibold flex items-center gap-0.5 leading-tight">
+                <span className="truncate max-w-[90px] xs:max-w-[120px]">{headerSubtitle}</span>
+                <span className="material-symbols-outlined text-[12px] text-[#8C938F]">expand_more</span>
+              </span>
+            </div>
           </button>
         </div>
 
-        {/* Language Pill & Profile Button */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Right: Android-Ergonomic Quick Actions */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Language Selector Pill */}
           <div className="relative">
             <button
+              id="header-language-toggle-btn"
               onClick={() => setShowLangMenu(!showLangMenu)}
-              className="h-9 px-3 rounded-full bg-[#FFFFFF] border border-[#E4DFD2] flex items-center gap-1 text-xs font-bold text-[#2F6B4F] shadow-2xs hover:bg-[#E7F0EA] transition-colors"
+              className="h-8 px-2 rounded-xl bg-white border border-[#E4DFD2] flex items-center gap-1 text-[11px] font-bold text-[#0A2719] shadow-2xs hover:bg-[#E4EFE8] transition-colors cursor-pointer"
               type="button"
+              aria-label="Change Language"
             >
-              <span className="material-symbols-outlined text-sm">translate</span>
-              <span>{langNames[profile.language]}</span>
+              <span className="material-symbols-outlined text-[14px] text-[#2F6B4F]">translate</span>
+              <span className="max-w-[45px] truncate">{langNames[profile.language]}</span>
             </button>
 
             {showLangMenu && (
-              <div className="absolute right-0 mt-2 w-32 bg-white rounded-xl shadow-lg border border-[#E4DFD2] py-1 z-50">
+              <div className="absolute right-0 mt-1.5 w-32 bg-white rounded-2xl shadow-xl border border-[#E4DFD2] py-1 z-50 animate-scale-up">
                 {(['hi', 'pa', 'en', 'ja'] as Language[]).map((lang) => (
                   <button
                     key={lang}
@@ -97,15 +121,15 @@ export const Header: React.FC<HeaderProps> = ({
                       onLanguageChange(lang);
                       setShowLangMenu(false);
                     }}
-                    className={`w-full text-left px-3 py-2 text-sm font-medium flex items-center justify-between ${
+                    className={`w-full text-left px-3 py-1.5 text-xs font-medium flex items-center justify-between cursor-pointer ${
                       profile.language === lang
-                        ? 'bg-[#E7F0EA] text-[#2F6B4F] font-bold'
-                        : 'text-[#262421] hover:bg-[#FAF7F0]'
+                        ? 'bg-[#E4EFE8] text-[#0A2719] font-bold'
+                        : 'text-[#1C1B1A] hover:bg-[#FAF7F0]'
                     }`}
                   >
                     <span>{langNames[lang]}</span>
                     {profile.language === lang && (
-                      <span className="material-symbols-outlined text-sm">check</span>
+                      <span className="material-symbols-outlined text-xs text-[#0A2719]">check</span>
                     )}
                   </button>
                 ))}
@@ -113,56 +137,59 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {onOpenShareStock && (
+          {/* Share QR (Visible when authenticated or on wider screens) */}
+          {isAuthenticated && onOpenShareStock && (
             <button
               onClick={onOpenShareStock}
-              className="w-9 h-9 rounded-full bg-[#FAF7F0] border border-[#E4DFD2] text-[#7a5900] hover:bg-[#E7F0EA] flex items-center justify-center shadow-2xs active:scale-95 transition-transform"
+              className="w-8 h-8 rounded-xl bg-white border border-[#E4DFD2] text-[#7a5900] hover:bg-[#E4EFE8] flex items-center justify-center shadow-2xs active:scale-95 transition-transform cursor-pointer"
               title={profile.language === 'en' ? 'Customer Live Catalog & QR' : 'ग्राहक लाइव स्टॉक व QR'}
               type="button"
             >
-              <span className="material-symbols-outlined text-[20px]">qr_code_2</span>
+              <span className="material-symbols-outlined text-[17px]">qr_code_2</span>
             </button>
           )}
 
-          {!currentUser && onOpenAuth && (
+          {/* Auth State Button: Professional Login CTA vs Verified Profile Avatar */}
+          {!isAuthenticated && onOpenAuth ? (
             <button
               id="header-open-auth-btn"
               onClick={onOpenAuth}
-              className="h-9 px-2.5 rounded-full bg-[#E7F0EA] border border-[#2F6B4F]/40 hover:bg-[#d5e7da] text-[#1E4632] flex items-center gap-1 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
-              title="डेटाबेस बैकअप व लॉगिन"
+              className="h-8 px-2.5 rounded-xl bg-[#0A2719] hover:bg-[#15422B] text-white flex items-center gap-1.5 text-[11px] font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+              title="Google लॉगिन व क्लाउड बैकअप"
               type="button"
             >
-              <span className="material-symbols-outlined text-[17px] text-[#2F6B4F]">cloud_sync</span>
-              <span className="text-[11px] font-bold">लॉगिन</span>
+              <span className="material-symbols-outlined text-[15px]">lock</span>
+              <span>{profile.language === 'en' ? 'Login' : 'लॉगिन'}</span>
+            </button>
+          ) : (
+            <button
+              id="header-profile-btn"
+              onClick={onOpenProfile}
+              className="w-8 h-8 rounded-xl bg-[#0A2719] text-[#FAF7F0] flex items-center justify-center shadow-2xs active:scale-95 transition-transform relative overflow-hidden cursor-pointer"
+              aria-label={t.profileTitle}
+              type="button"
+              title={currentUser ? `${currentUser.displayName || currentUser.email || 'User'} • सक्रिय (Active)` : t.profileTitle}
+            >
+              {currentUser?.photoURL ? (
+                <img
+                  src={currentUser.photoURL}
+                  alt="Profile"
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="material-symbols-outlined text-[18px]">person</span>
+              )}
+              {currentUser && (
+                <span
+                  className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white ${
+                    isSyncing ? 'bg-amber-400 animate-spin' : 'bg-emerald-400'
+                  }`}
+                  title={isSyncing ? 'सिंक हो रहा है...' : 'खाता सक्रिय (Active)'}
+                />
+              )}
             </button>
           )}
-
-          <button
-            onClick={onOpenProfile}
-            className="w-9 h-9 rounded-full bg-[#1E4632] text-[#FAF7F0] flex items-center justify-center shadow-xs active:scale-95 transition-transform relative overflow-hidden"
-            aria-label={t.profileTitle}
-            type="button"
-            title={currentUser ? `${currentUser.email || 'Google User'} • क्लाउड डेटाबेस सिंक` : t.profileTitle}
-          >
-            {currentUser?.photoURL ? (
-              <img
-                src={currentUser.photoURL}
-                alt="User"
-                className="w-full h-full rounded-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <span className="material-symbols-outlined text-[20px]">person</span>
-            )}
-            {currentUser && (
-              <span
-                className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${
-                  isSyncing ? 'bg-amber-400 animate-spin' : 'bg-[#2F6B4F]'
-                }`}
-                title={isSyncing ? 'सिंक हो रहा है...' : 'क्लाउड डेटाबेस सक्रिय'}
-              />
-            )}
-          </button>
         </div>
       </div>
     </header>

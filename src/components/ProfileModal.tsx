@@ -42,8 +42,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onOpenPersonalize,
 }) => {
   const t = translations[profile.language];
-  const [shopName, setShopName] = useState(profile.shopName);
-  const [ownerName, setOwnerName] = useState(profile.ownerName || '');
+  const [shopName, setShopName] = useState(
+    profile.shopName && profile.shopName !== 'मेरी दुकान' && profile.shopName !== 'डेमो स्टोर'
+      ? profile.shopName
+      : currentUser?.displayName
+      ? `${currentUser.displayName} की दुकान`
+      : ''
+  );
+  const [ownerName, setOwnerName] = useState(profile.ownerName || currentUser?.displayName || '');
   const [phone, setPhone] = useState(profile.phone || '');
   const [selectedLang, setSelectedLang] = useState<Language>(profile.language);
   const [selectedStore, setSelectedStore] = useState<StoreType>(profile.storeType);
@@ -264,10 +270,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             </div>
           </div>
 
-          {/* Real Cloud Database & Account Integration */}
+          {/* Account & Synchronization */}
           <div className="pt-2 border-t border-[#E4DFD2] space-y-2">
             <div className="text-[11px] font-bold text-[#726C60] uppercase tracking-wider px-1">
-              {selectedLang === 'en' ? 'Cloud Database & Account' : 'क्लाउड डेटाबेस व खाता'}
+              {selectedLang === 'en' ? 'Account & Backup' : 'खाता व डेटा बैकअप (Account)'}
             </div>
 
             {currentUser ? (
@@ -306,14 +312,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     <span className="material-symbols-outlined text-sm flex-shrink-0">verified_user</span>
                     <span>
                       {selectedLang === 'en'
-                        ? '100% Free Firebase Spark Version (Zero Charges Forever)'
-                        : '100% मुफ़्त Firebase Spark वर्ज़न (कभी कोई चार्ज नहीं)'}
+                        ? 'Account Connected & Secure'
+                        : 'खाता कनेक्टेड व सुरक्षित'}
                     </span>
                   </div>
                   <div className="text-[10px] text-[#1E4632] leading-tight pl-5">
                     {selectedLang === 'en'
-                      ? 'Your account registration, login history, and inventory/udhaar data are securely saved in private cloud storage with instant local caching.'
-                      : 'आपकी पंजीकरण तिथि, लॉगिन इतिहास और दुकान का सारा स्टॉक व उधार डेटा आपके निजी खाते में सुरक्षित है।'}
+                      ? 'Your shop inventory, khata, and sales records are securely backed up to your account.'
+                      : 'आपकी दुकान का सारा स्टॉक, बही-खाता और बिल रिकॉर्ड्स आपके खाते में सुरक्षित रूप से सिंक हैं।'}
                   </div>
                 </div>
 
@@ -428,8 +434,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 </div>
                 <p className="text-[11px] text-[#726C60] leading-relaxed">
                   {selectedLang === 'en'
-                    ? 'Currently your data is saved only on this device. Sign in with Google or Email to connect real Cloud Firestore and prevent data loss.'
-                    : 'अभी आपका डेटा केवल इस ब्राउज़र में है। Google या ईमेल से 1-क्लिक में लॉगिन करें ताकि आपका स्टॉक व खाता कभी डिलीट न हो और किसी भी फ़ोन पर खुल सके।'}
+                    ? 'Currently your data is saved only on this device. Sign in with Google to sync your shop data across devices and keep it protected.'
+                    : 'अभी आपका डेटा केवल इस डिवाइस पर है। Google से 1-क्लिक में लॉगिन करें ताकि आपका स्टॉक व खाता सुरक्षित रहे और किसी भी फ़ोन पर खुल सके।'}
                 </p>
                 {onOpenAuth && (
                   <button
@@ -440,11 +446,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     }}
                     className="w-full py-2.5 px-3 rounded-xl bg-[#2F6B4F] hover:bg-[#1E4632] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-98 cursor-pointer"
                   >
-                    <span className="material-symbols-outlined text-base">cloud_sync</span>
+                    <span className="material-symbols-outlined text-base">login</span>
                     <span>
                       {selectedLang === 'en'
-                        ? 'Connect Cloud Database (Sign In)'
-                        : 'क्लाउड डेटाबेस से जोड़ें (लॉगिन करें)'}
+                        ? 'Sign In / Connect Account'
+                        : 'खाता जोड़ें (लॉगिन करें)'}
                     </span>
                   </button>
                 )}

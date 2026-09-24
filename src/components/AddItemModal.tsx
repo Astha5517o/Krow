@@ -2,9 +2,14 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { StockItem, StoreType, Language, ExchangeType, SupplierChannel, SupplierOrderMode } from '../types';
 import { translations } from '../translations';
-import { getDefaultCategories } from '../data/defaultData';
+import {
+  getDefaultCategories,
+  INITIAL_UNIFORM_STOCK_ITEMS,
+  INITIAL_GIFT_STOCK_ITEMS,
+} from '../data/defaultData';
 import { safeStopScanner } from '../utils/scannerUtils';
 import { lookupMasterBarcode, MasterProduct } from '../data/masterBarcodes';
+import { resolveProductByBarcode } from '../services/barcodeLookupService';
 import { inferWholesalerInfo, DEFAULT_WHOLESALERS } from '../data/wholesalersData';
 import {
   searchKaryanaMaster,
@@ -23,6 +28,7 @@ interface AddItemModalProps {
   storeType: StoreType;
   itemToEdit?: StockItem;
   initialBarcode?: string;
+  autoScanDirectly?: boolean;
   onSave: (itemData: Omit<StockItem, 'id' | 'createdAt'>, existingId?: string) => void;
   onDelete?: (id: string) => void;
   onClose: () => void;
@@ -33,6 +39,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   storeType,
   itemToEdit,
   initialBarcode,
+  autoScanDirectly = false,
   onSave,
   onDelete,
   onClose,
@@ -66,6 +73,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   const [looseRatePer100g, setLooseRatePer100g] = useState<string>(itemToEdit?.looseRatePer100g ? String(itemToEdit.looseRatePer100g) : '');
   const [error, setError] = useState('');
   const [matchedMaster, setMatchedMaster] = useState<MasterProduct | undefined>(undefined);
+  const [isResolvingBarcode, setIsResolvingBarcode] = useState(false);
 
   // Master Catalog Autocomplete Dropdown State
   const [showCatalogDropdown, setShowCatalogDropdown] = useState(false);
@@ -74,33 +82,176 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Camera scanning state for quick barcode scanning
-  const [showCamera, setShowCamera] = useState(false);
+  const [showCamera, setShowCamera] = useState(autoScanDirectly);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const html5QrRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = 'add-item-barcode-scanner';
 
-  // Filtered master catalog items based on typed name and optional category
+  // Instant Auto-List Mode: packet details are auto-filled and item is listed directly to stock
+  const [autoListOnScan, setAutoListOnScan] = useState(!itemToEdit);
+  const [autoListedToast, setAutoListedToast] = useState<{ name: string; price: number; barcode: string } | null>(null);
+  const [itemsListedSessionCount, setItemsListedSessionCount] = useState(0);
+  const lastScanTimeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
+
+  // Filtered master catalog items strictly based on the current store type
   const masterCatalogSuggestions = useMemo(() => {
     if (storeType === 'stationery') {
-      const statResults = searchStationeryMaster(
+      return searchStationeryMaster(
         name,
-        14,
+        15,
         catalogCategoryFilter === 'all' ? undefined : catalogCategoryFilter
       );
-      if (statResults.length > 0 || !name.trim()) return statResults;
     }
-    const karyanaResults = searchKaryanaMaster(
+    if (storeType === 'uniform') {
+      const q = name.toLowerCase().trim();
+      return INITIAL_UNIFORM_STOCK_ITEMS.filter((item) => {
+        const matchesCat = catalogCategoryFilter === 'all' || item.category === catalogCategoryFilter;
+        const matchesQuery = !q || item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q);
+        return matchesCat && matchesQuery;
+      }).map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        unit: item.unit,
+        sellPrice: item.sellPrice,
+        buyPrice: item.buyPrice,
+        barcode: item.barcode,
+        packSizes: [item.packSize ? `${item.packSize} पीस` : '1 पीस'],
+      } as KaryanaMasterItem));
+    }
+    if (storeType === 'gift_shop') {
+      const q = name.toLowerCase().trim();
+      return INITIAL_GIFT_STOCK_ITEMS.filter((item) => {
+        const matchesCat = catalogCategoryFilter === 'all' || item.category === catalogCategoryFilter;
+        const matchesQuery = !q || item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q);
+        return matchesCat && matchesQuery;
+      }).map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        unit: item.unit,
+        sellPrice: item.sellPrice,
+        buyPrice: item.buyPrice,
+        barcode: item.barcode,
+        packSizes: [item.packSize ? `${item.packSize} पीस` : '1 पीस'],
+      } as KaryanaMasterItem));
+    }
+    // Kirana / default: only Kirana items
+    return searchKaryanaMaster(
       name,
-      12,
+      15,
       catalogCategoryFilter === 'all' ? undefined : catalogCategoryFilter
     );
-    const stationeryResults = searchStationeryMaster(
-      name,
-      6,
-      catalogCategoryFilter === 'all' ? undefined : catalogCategoryFilter
-    );
-    return [...stationeryResults, ...karyanaResults].slice(0, 14);
   }, [name, catalogCategoryFilter, storeType]);
+
+  // Dynamic catalog filter chips strictly matching the store type
+  const catalogFilterChips = useMemo(() => {
+    if (storeType === 'stationery') {
+      return [
+        { id: 'all', label: language === 'en' ? 'All Stationery' : 'सभी स्टेशनरी' },
+        { id: 'पेन, पेंसिल व सुधार सामग्री', label: '✏️ पेन व पेंसिल' },
+        { id: 'कॉपियाँ, रजिस्टर व पेपर', label: '📓 कॉपियाँ/रजिस्टर' },
+        { id: 'ज्योमेट्री बॉक्स व स्केल', label: '📐 ज्योमेट्री बॉक्स' },
+        { id: 'रंग, पेंट व आर्ट क्राफ्ट', label: '🎨 रंग व आर्ट' },
+        { id: 'गोंद, टेप व कैंची', label: '✂️ गोंद व टेप' },
+        { id: 'फाइल, फोल्डर व ऑफिस सामान', label: '📁 फाइल व ऑफिस' },
+      ];
+    }
+    if (storeType === 'uniform') {
+      return [
+        { id: 'all', label: language === 'en' ? 'All Uniforms' : 'सभी यूनिफॉर्म' },
+        { id: 'स्कूल यूनिफॉर्म (शर्ट/पैंट)', label: '👔 शर्ट व पैंट' },
+        { id: 'स्कर्ट व ट्यूनिक', label: '👗 स्कर्ट व फ्रॉक' },
+        { id: 'टाई व बेल्ट', label: '🎗️ टाई व बेल्ट' },
+        { id: 'स्कूल जूते व मोज़े', label: '🧦 जूते व मोज़े' },
+        { id: 'स्वेटर व ब्लेज़र', label: '🧥 स्वेटर/ब्लेज़र' },
+      ];
+    }
+    if (storeType === 'gift_shop') {
+      return [
+        { id: 'all', label: language === 'en' ? 'All Gifts' : 'सभी गिफ्ट' },
+        { id: 'खिलौने व गेम्स', label: '🧸 खिलौने व गेम्स' },
+        { id: 'गिफ्ट शोपीस व मूर्तियाँ', label: '🏺 शोपीस व मूर्तियाँ' },
+        { id: 'घड़ियां व वॉल क्लॉक', label: '⏰ घड़ियां' },
+        { id: 'फोटो फ्रेम व एल्बम', label: '🖼️ फोटो फ्रेम' },
+        { id: 'ग्रीटिंग कार्ड व रैपिंग', label: '💌 ग्रीटिंग कार्ड' },
+      ];
+    }
+    return [
+      { id: 'all', label: language === 'en' ? 'All Grocery' : 'सभी किराना' },
+      { id: 'दाल व अनाज', label: '🌾 दाल व अनाज' },
+      { id: 'मसाले', label: '🧂 मसाले' },
+      { id: 'खाद्य तेल व घी', label: '🍳 तेल व घी' },
+      { id: 'चाय व पेय', label: '☕ चाय व पेय' },
+      { id: 'दूध व ब्रेड', label: '🥛 दूध व ब्रेड' },
+      { id: 'बिस्कुट व नमकीन', label: '🍫 बिस्कुट/नमकीन' },
+      { id: 'पैकेज्ड फूड', label: '🥫 मैगी/नूडल्स' },
+      { id: 'पर्सनल केयर', label: '🧼 साबुन/तेल' },
+      { id: 'सफाई सामान', label: '🧽 सर्फ/सफाई' },
+    ];
+  }, [storeType, language]);
+
+  // Catalog Toggle Button Text
+  const catalogBtnTitle = useMemo(() => {
+    if (showCatalogDropdown) return language === 'en' ? 'Hide Catalog' : 'कैटलॉग छुपाएं';
+    if (storeType === 'stationery') return language === 'en' ? 'Stationery Catalog (71+ items)' : 'स्टेशनरी कैटलॉग (71+ आइटम)';
+    if (storeType === 'uniform') return language === 'en' ? 'Uniform Catalog' : 'यूनिफॉर्म कैटलॉग';
+    if (storeType === 'gift_shop') return language === 'en' ? 'Gift Catalog' : 'गिफ्ट कैटलॉग';
+    return language === 'en' ? 'Kirana Catalog (250+ items)' : 'किराना कैटलॉग (250+ आइटम)';
+  }, [showCatalogDropdown, storeType, language]);
+
+  // Unit fast tags by store type
+  const unitTags = useMemo(() => {
+    if (storeType === 'stationery') {
+      return ['पीस', 'दर्जन', 'पैकेट', 'बॉक्स', 'सेट', 'रिम'];
+    }
+    if (storeType === 'uniform') {
+      return ['पीस', 'जोड़ा', 'सेट', 'पैकेट'];
+    }
+    if (storeType === 'gift_shop') {
+      return ['पीस', 'सेट', 'बॉक्स', 'पैकेट'];
+    }
+    return ['पैकेट', 'किलो', 'ग्राम', 'लीटर', 'बोतल', 'पीस', 'पेटी', 'थैले'];
+  }, [storeType]);
+
+  // Sample quick barcodes by store type
+  const sampleBarcodes = useMemo(() => {
+    if (storeType === 'stationery') {
+      return [
+        { label: 'लिखो-फेंको पेन ₹5', code: '8901725001010' },
+        { label: 'जेल पेन ₹40', code: '8901725001027' },
+        { label: 'क्लासमेट कॉपी ₹60', code: '8901725002017' },
+        { label: 'अप्सरा पेंसिल ₹7', code: '8901725001041' },
+        { label: 'फेविकोल 20g ₹10', code: '8901725005018' },
+        { label: 'नटराज रबर ₹5', code: '8901725001065' },
+      ];
+    }
+    if (storeType === 'uniform') {
+      return [
+        { label: 'सफेद शर्ट', code: '8901825001011' },
+        { label: 'फुल पैंट', code: '8901825001028' },
+        { label: 'स्कूल टाई', code: '8901825001035' },
+        { label: 'स्कूल बेल्ट', code: '8901825001042' },
+        { label: 'सफेद मोज़े', code: '8901825001059' },
+      ];
+    }
+    if (storeType === 'gift_shop') {
+      return [
+        { label: 'स्टंट कार', code: '8901925001018' },
+        { label: 'कैक्टस टॉय', code: '8901925001025' },
+        { label: 'एलईडी घड़ी', code: '8901925001032' },
+        { label: 'फोटो फ्रेम', code: '8901925001049' },
+      ];
+    }
+    return [
+      { label: 'क्लिनिक प्लस ₹1', code: '8901030006241' },
+      { label: 'पल्स टॉफी ₹1', code: '8901296061015' },
+      { label: 'घड़ी पाउच ₹1', code: '8906007280010' },
+      { label: 'मैगी मसाला ₹5', code: '8901058853636' },
+      { label: 'पारले-जी ₹5', code: '8901719101015' },
+      { label: 'नेस्कैफे ₹2', code: '8901058870022' },
+    ];
+  }, [storeType]);
 
   // Click outside to close master catalog dropdown
   useEffect(() => {
@@ -176,6 +327,92 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
     }
   };
 
+  const handleApplyMaster = (m: MasterProduct) => {
+    setName(language === 'en' ? (m.nameEn || m.name) : m.name);
+    setCategory(m.category);
+    setUnit(m.unit || 'पैकेट');
+    setSellPrice(String(m.sellPrice));
+    setBuyPrice(String(m.buyPrice));
+    const inferred = inferWholesalerInfo(m.category, m.name);
+    setSupplierChannel(inferred.channel);
+    setSupplierOrderMode(inferred.orderMode);
+    setSupplierName(inferred.suggestedSupplierName);
+    setMatchedMaster(m);
+    setAutoFillSuccessNotice(
+      language === 'en'
+        ? `✓ Auto-filled: ${m.nameEn || m.name} (₹${m.sellPrice})`
+        : `✓ बारकोड से सभी विवरण भर दिए गए: ${m.name} (भाव: ₹${m.sellPrice})`
+    );
+    try {
+      playSuccessChime();
+    } catch {}
+  };
+
+  // Master Barcode Handler: Resolves product info and auto-lists item directly into stock
+  const handleProcessAndAutoListBarcode = async (rawCode: string, forceAutoList = false) => {
+    const clean = rawCode.trim();
+    if (!clean) return;
+
+    // Prevent duplicate rapid bursts of same packet code
+    const now = Date.now();
+    if (lastScanTimeRef.current.code === clean && now - lastScanTimeRef.current.time < 1600) {
+      return;
+    }
+    lastScanTimeRef.current = { code: clean, time: now };
+
+    playScanBeep();
+    setBarcode(clean);
+    setIsResolvingBarcode(true);
+
+    try {
+      const found = await resolveProductByBarcode(clean);
+      setIsResolvingBarcode(false);
+
+      if (found) {
+        handleApplyMaster(found);
+
+        const shouldAutoSave = (autoListOnScan || forceAutoList) && !itemToEdit;
+        if (shouldAutoSave) {
+          const finalName = language === 'en' ? (found.nameEn || found.name) : found.name;
+          const inferred = inferWholesalerInfo(found.category, found.name);
+          const sellP = found.sellPrice || 20;
+          const buyP = found.buyPrice || Math.round(sellP * 0.85);
+
+          const itemData: Omit<StockItem, 'id' | 'createdAt'> = {
+            name: finalName,
+            barcode: clean,
+            category: found.category || categories[0],
+            unit: found.unit || 'पैकेट',
+            packSize: 1,
+            currentQuantity: 20,
+            reorderLevel: 5,
+            buyPrice: buyP,
+            sellPrice: sellP,
+            isPerishable: false,
+            exchangeType: 'none',
+            isLooseItem: false,
+            supplierName: found.brand || inferred.suggestedSupplierName,
+            supplierChannel: inferred.channel,
+            supplierOrderMode: inferred.orderMode,
+          };
+
+          onSave(itemData);
+          playSuccessChime();
+          setItemsListedSessionCount((c) => c + 1);
+          setAutoListedToast({
+            name: finalName,
+            price: sellP,
+            barcode: clean,
+          });
+          setTimeout(() => setAutoListedToast(null), 3500);
+        }
+      }
+    } catch {
+      setIsResolvingBarcode(false);
+    }
+  };
+
+  // Camera Barcode Scanner Effect
   useEffect(() => {
     if (!showCamera) {
       if (html5QrRef.current) {
@@ -217,13 +454,10 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
             if (!isMounted) return;
             const clean = decoded.trim();
             if (clean) {
-              playScanBeep();
-              setBarcode(clean);
-              const found = lookupMasterBarcode(clean);
-              if (found) {
-                handleApplyMaster(found);
+              handleProcessAndAutoListBarcode(clean);
+              if (!autoListOnScan) {
+                setShowCamera(false);
               }
-              setShowCamera(false);
             }
           },
           () => {}
@@ -253,53 +487,106 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
         safeStopScanner(scannerInstance);
       }
     };
-  }, [showCamera, language]);
+  }, [showCamera, autoListOnScan, language]);
 
-  // Auto-detect master product when barcode changes
+  // Hardware USB Barcode Scanner Gun Listener
   useEffect(() => {
-    if (!barcode.trim()) {
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isBarcodeField = activeEl?.getAttribute('data-barcode-field') === 'true';
+      // If focused on another text input, don't intercept unless it's the barcode field
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA') && !isBarcodeField) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastKeyTime > 160) {
+        buffer = '';
+      }
+      lastKeyTime = now;
+
+      if (e.key === 'Enter') {
+        if (buffer.length >= 4) {
+          e.preventDefault();
+          const clean = buffer.trim();
+          buffer = '';
+          handleProcessAndAutoListBarcode(clean);
+        }
+      } else if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [autoListOnScan, itemToEdit, language, categories]);
+
+  // Auto-detect master product and auto-fill when barcode changes
+  useEffect(() => {
+    const clean = barcode.trim();
+    if (!clean) {
       setMatchedMaster(undefined);
+      setIsResolvingBarcode(false);
       return;
     }
-    const found = lookupMasterBarcode(barcode);
-    setMatchedMaster(found);
+
+    let isCurrent = true;
+
+    // Instant local check first (0ms)
+    const quickLocal = lookupMasterBarcode(clean);
+    if (quickLocal) {
+      setMatchedMaster(quickLocal);
+      if (!name || name.trim() === '') {
+        handleApplyMaster(quickLocal);
+      }
+      return;
+    }
+
+    // For barcodes with 5+ digits, trigger smart lookup
+    if (clean.length >= 5) {
+      setIsResolvingBarcode(true);
+      const timer = setTimeout(async () => {
+        try {
+          const found = await resolveProductByBarcode(clean);
+          if (!isCurrent) return;
+          setIsResolvingBarcode(false);
+          if (found) {
+            setMatchedMaster(found);
+            if (!name || name.trim() === '') {
+              handleApplyMaster(found);
+            }
+          }
+        } catch {
+          if (isCurrent) setIsResolvingBarcode(false);
+        }
+      }, 350);
+
+      return () => {
+        isCurrent = false;
+        clearTimeout(timer);
+      };
+    }
   }, [barcode]);
 
   // If initialBarcode provided on open and no name was entered yet, auto-fill immediately
   useEffect(() => {
     if (initialBarcode && !itemToEdit && !name) {
-      const found = lookupMasterBarcode(initialBarcode);
-      if (found) {
-        setName(language === 'en' ? found.nameEn : found.name);
-        setCategory(found.category);
-        setUnit(found.unit);
-        setSellPrice(String(found.sellPrice));
-        setBuyPrice(String(found.buyPrice));
-        const inferred = inferWholesalerInfo(found.category, found.name);
-        setSupplierChannel(inferred.channel);
-        setSupplierOrderMode(inferred.orderMode);
-        setSupplierName(inferred.suggestedSupplierName);
-      }
+      setIsResolvingBarcode(true);
+      resolveProductByBarcode(initialBarcode).then((found) => {
+        setIsResolvingBarcode(false);
+        if (found) {
+          handleApplyMaster(found);
+        }
+      }).catch(() => setIsResolvingBarcode(false));
     }
   }, [initialBarcode, itemToEdit, language, name]);
-
-  const handleApplyMaster = (m: MasterProduct) => {
-    setName(language === 'en' ? m.nameEn : m.name);
-    setCategory(m.category);
-    setUnit(m.unit);
-    setSellPrice(String(m.sellPrice));
-    setBuyPrice(String(m.buyPrice));
-    const inferred = inferWholesalerInfo(m.category, m.name);
-    setSupplierChannel(inferred.channel);
-    setSupplierOrderMode(inferred.orderMode);
-    setSupplierName(inferred.suggestedSupplierName);
-  };
 
   const numBuy = parseFloat(buyPrice) || 0;
   const numSell = parseFloat(sellPrice) || 0;
   const calculatedProfit = numSell > 0 ? (numSell - numBuy) : 0;
-
-  const unitTags = ['पैकेट', 'बोरी', 'कट्टा', 'लड़ी', 'पेटी', 'दर्जन', 'किलो', 'लीटर', 'पीस'];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -405,27 +692,16 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowCatalogDropdown(!showCatalogDropdown)}
-                  className="text-[11px] font-bold text-[#2F6B4F] hover:text-[#1E4632] flex items-center gap-1 bg-[#2F6B4F]/10 hover:bg-[#2F6B4F]/15 px-2 py-0.5 rounded-lg transition-colors"
+                  className="text-[11px] font-bold text-[#2F6B4F] hover:text-[#1E4632] flex items-center gap-1 bg-[#2F6B4F]/10 hover:bg-[#2F6B4F]/15 px-2 py-0.5 rounded-lg transition-colors cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-xs">menu_book</span>
-                  <span>{showCatalogDropdown ? (language === 'en' ? 'Hide Catalog' : 'कैटलॉग छुपाएं') : (language === 'en' ? 'Master Catalog (250+ items)' : 'किराना कैटलॉग (250+ आइटम)')}</span>
+                  <span>{catalogBtnTitle}</span>
                 </button>
               </div>
 
               {/* Category Filter Chips for Master Catalog */}
               <div className="flex items-center gap-1 overflow-x-auto pb-1.5 scrollbar-none mb-1 text-[11px]">
-                {[
-                  { id: 'all', label: language === 'en' ? 'All Items' : 'सभी सामान' },
-                  { id: 'दाल व अनाज', label: '🌾 दाल व अनाज' },
-                  { id: 'मसाले', label: '🧂 मसाले' },
-                  { id: 'खाद्य तेल व घी', label: '🍳 तेल व घी' },
-                  { id: 'चाय व पेय', label: '☕ चाय व पेय' },
-                  { id: 'दूध व ब्रेड', label: '🥛 दूध व ब्रेड' },
-                  { id: 'बिस्कुट व नमकीन', label: '🍫 बिस्कुट/नमकीन' },
-                  { id: 'पैकेज्ड फूड', label: '🥫 मैगी/नूडल्स' },
-                  { id: 'पर्सनल केयर', label: '🧼 साबुन/तेल' },
-                  { id: 'सफाई सामान', label: '🧽 सर्फ/सफाई' },
-                ].map((cat) => (
+                {catalogFilterChips.map((cat) => (
                   <button
                     key={cat.id}
                     type="button"
@@ -433,7 +709,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                       setCatalogCategoryFilter(cat.id);
                       setShowCatalogDropdown(true);
                     }}
-                    className={`px-2 py-0.5 rounded-full whitespace-nowrap transition-all text-[11px] font-semibold ${
+                    className={`px-2 py-0.5 rounded-full whitespace-nowrap transition-all text-[11px] font-semibold cursor-pointer ${
                       catalogCategoryFilter === cat.id
                         ? 'bg-[#2F6B4F] text-white shadow-2xs'
                         : 'bg-[#F3EFE6] text-[#615C53] hover:bg-[#EAE4D6]'
@@ -606,6 +882,34 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                 </div>
               </div>
 
+              {/* Auto-List Mode Toggle Banner */}
+              {!itemToEdit && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-emerald-950 font-bold">
+                    <input
+                      type="checkbox"
+                      checked={autoListOnScan}
+                      onChange={(e) => setAutoListOnScan(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-700 accent-emerald-700 cursor-pointer"
+                    />
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm text-emerald-700">bolt</span>
+                      <span>
+                        {language === 'en'
+                          ? 'Auto-List to Stock on Scan (No manual typing or clicks needed)'
+                          : '⚡ ऑटो-लिस्ट मोड: बारकोड स्कैन होते ही सामान खुद स्टॉक में लिस्ट हो जाए'}
+                      </span>
+                    </span>
+                  </label>
+                  {itemsListedSessionCount > 0 && (
+                    <span className="bg-emerald-700 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 animate-scale-up">
+                      <span className="material-symbols-outlined text-[13px]">done_all</span>
+                      <span>{itemsListedSessionCount} {language === 'en' ? 'listed' : 'लिस्टेड'}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* In-Modal Camera Scanner */}
               {showCamera && (
                 <div className="relative rounded-xl overflow-hidden bg-black aspect-16/10 border-2 border-[#2F6B4F] shadow-md animate-scale-up">
@@ -618,6 +922,17 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Auto-Listed Toast in Camera Viewfinder */}
+                  {autoListedToast && (
+                    <div className="absolute top-2 left-2 right-2 bg-emerald-900/95 backdrop-blur-xs border border-emerald-400 text-white p-2 rounded-lg text-xs font-bold flex items-center justify-between shadow-lg z-10 animate-fade-in">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="material-symbols-outlined text-emerald-300 text-sm">verified</span>
+                        <span className="truncate">✓ {autoListedToast.name} (₹{autoListedToast.price}) लिस्ट हो गया!</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-200 shrink-0">अगला पैकेट दिखाएं →</span>
+                    </div>
+                  )}
+
                   {cameraError && (
                     <div className="absolute inset-0 bg-black/80 p-3 flex flex-col items-center justify-center text-center text-white">
                       <span className="material-symbols-outlined text-amber-400 text-2xl mb-1">videocam_off</span>
@@ -625,57 +940,122 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                     </div>
                   )}
 
-                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] text-white/90 bg-black/50 backdrop-blur-xs px-2 py-1 rounded">
-                    <span>{language === 'en' ? 'Point camera at barcode' : 'बारकोड पर कैमरा रखें'}</span>
+                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] text-white/90 bg-black/60 backdrop-blur-xs px-2.5 py-1.5 rounded-lg">
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-xs text-emerald-400">qr_code_scanner</span>
+                      {language === 'en' ? 'Point camera at any packet barcode' : 'किसी भी पैकेट के बारकोड पर कैमरा रखें'}
+                    </span>
                     <button
                       type="button"
                       onClick={() => setShowCamera(false)}
-                      className="text-amber-300 font-bold underline"
+                      className="bg-white/20 hover:bg-white/30 text-white font-bold px-2 py-0.5 rounded text-xs transition-colors"
                     >
-                      {language === 'en' ? 'Cancel' : 'रद्द करें'}
+                      {language === 'en' ? 'Done' : 'कैमरा बंद'}
                     </button>
                   </div>
                 </div>
               )}
 
-              <input
-                type="text"
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                placeholder={
-                  language === 'en'
-                    ? 'Scan or enter barcode (e.g. 8901030006241)'
-                    : 'बारकोड नंबर लिखें या गन से स्कैन करें (जैसे 8901030006241)'
-                }
-                className="w-full h-10 px-3 rounded-lg border border-[#E4DFD2] bg-white text-xs font-mono text-[#262421] focus:outline-none focus:border-[#2F6B4F]"
-              />
+              {/* Barcode Input & Instant Auto-List Action */}
+              <div className="flex gap-1.5">
+                <input
+                  data-barcode-field="true"
+                  type="text"
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleProcessAndAutoListBarcode(barcode, true);
+                    }
+                  }}
+                  placeholder={
+                    language === 'en'
+                      ? 'Scan or enter barcode (e.g. 8901030006241)'
+                      : 'बारकोड नंबर लिखें या गन से स्कैन करें (जैसे 8901030006241)'
+                  }
+                  className="flex-1 h-10 px-3 rounded-lg border border-[#E4DFD2] bg-white text-xs font-mono text-[#262421] focus:outline-none focus:border-[#2F6B4F]"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleProcessAndAutoListBarcode(barcode, true)}
+                  className="h-10 px-3 bg-[#1E4632] hover:bg-[#163526] text-white text-xs font-bold rounded-lg flex items-center gap-1 shrink-0 active:scale-95 shadow-2xs transition-all"
+                  title={language === 'en' ? 'Auto-fill details & list item to stock' : 'सामान का विवरण भरकर तुरंत स्टॉक में लिस्ट करें'}
+                >
+                  <span className="material-symbols-outlined text-sm text-[#F4D03F]">bolt</span>
+                  <span>{language === 'en' ? 'Auto-List' : 'ऑटो-लिस्ट'}</span>
+                </button>
+              </div>
 
-              {/* Quick Small Packet / Sachet Sample Chips */}
+              {/* Barcode Resolving Indicator */}
+              {isResolvingBarcode && (
+                <div className="p-2 bg-emerald-50 border border-emerald-300 rounded-lg flex items-center gap-2 text-xs text-emerald-800 font-medium animate-pulse">
+                  <div className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                  <span>
+                    {language === 'en'
+                      ? 'Fetching product details from barcode...'
+                      : 'बारकोड से सामान का नाम, भाव व विवरण अपने आप निकाला जा रहा है...'}
+                  </span>
+                </div>
+              )}
+
+              {/* Auto-Listed Success Toast Banner */}
+              {autoListedToast && (
+                <div className="p-3 bg-[#1E4632] text-white border border-[#2F6B4F] rounded-xl flex items-center justify-between gap-2 text-xs font-bold shadow-md animate-scale-up">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="material-symbols-outlined text-emerald-300 text-lg shrink-0">verified</span>
+                    <span className="truncate">
+                      {language === 'en'
+                        ? `⚡ "${autoListedToast.name}" (₹${autoListedToast.price}) auto-listed in stock!`
+                        : `⚡ "${autoListedToast.name}" (भाव ₹${autoListedToast.price}) स्टॉक में अपने-आप लिस्ट हो गया!`}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAutoListedToast(null)}
+                    className="text-white/80 hover:text-white shrink-0 text-xs font-bold px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Auto-fill Success Notice */}
+              {autoFillSuccessNotice && !autoListedToast && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-lg flex items-center justify-between gap-2 text-xs text-emerald-800 font-semibold shadow-2xs">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="material-symbols-outlined text-emerald-600 text-sm shrink-0">check_circle</span>
+                    <span className="truncate">{autoFillSuccessNotice}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAutoFillSuccessNotice(null)}
+                    className="text-emerald-700 hover:text-emerald-900 shrink-0 text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Quick Sample Barcode Chips */}
               <div className="pt-0.5">
                 <div className="flex items-center gap-1 text-[10px] text-[#6B7C72] mb-1">
                   <span className="material-symbols-outlined text-[12px] text-emerald-700">bolt</span>
-                  <span className="font-semibold">{language === 'en' ? 'Quick small packets:' : 'छोटे पैकेट / पाउच उदाहरण:'}</span>
+                  <span className="font-semibold">
+                    {storeType === 'stationery'
+                      ? (language === 'en' ? 'Quick stationery samples:' : 'स्टेशनरी बारकोड उदाहरण:')
+                      : (language === 'en' ? 'Quick sample barcodes:' : 'बारकोड उदाहरण:')}
+                  </span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {[
-                    { label: 'क्लिनिक प्लस ₹1', code: '8901030006241' },
-                    { label: 'पल्स टॉफी ₹1', code: '8901296061015' },
-                    { label: 'घड़ी पाउच ₹1', code: '8906007280010' },
-                    { label: 'मैगी मसाला ₹5', code: '8901058853636' },
-                    { label: 'पारले-जी ₹5', code: '8901719101015' },
-                    { label: 'नेस्कैफे ₹2', code: '8901058870022' },
-                  ].map((s) => (
+                  {sampleBarcodes.map((s) => (
                     <button
                       key={s.code}
                       type="button"
                       onClick={() => {
-                        setBarcode(s.code);
-                        const found = lookupMasterBarcode(s.code);
-                        if (found) {
-                          handleApplyMaster(found);
-                        }
+                        handleProcessAndAutoListBarcode(s.code);
                       }}
-                      className="px-2 py-0.5 bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-200/80 rounded-md text-[10px] font-semibold transition-colors shadow-2xs"
+                      className="px-2 py-0.5 bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-200/80 rounded-md text-[10px] font-semibold transition-colors shadow-2xs cursor-pointer"
                     >
                       {s.label}
                     </button>

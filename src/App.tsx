@@ -31,6 +31,7 @@ import {
   INITIAL_CUSTOMERS,
   INITIAL_TRANSACTIONS,
   INITIAL_SALES,
+  getDefaultStockItems,
 } from './data/defaultData';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
@@ -70,14 +71,20 @@ export default function App() {
     const saved = localStorage.getItem('krow_user_profile');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            ...parsed,
+            shopName: parsed.shopName === 'मेरी दुकान' ? '' : parsed.shopName,
+          };
+        }
       } catch (e) {
         // ignore
       }
     }
     return {
-      uid: 'local-user',
-      shopName: 'मेरी दुकान',
+      uid: 'guest',
+      shopName: '',
       ownerName: '',
       language: 'hi',
       storeType: 'kirana',
@@ -100,12 +107,23 @@ export default function App() {
     const saved = localStorage.getItem('krow_stock_items');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch (e) {
         // ignore
       }
     }
-    return INITIAL_STOCK_ITEMS;
+    const savedProfileStr = localStorage.getItem('krow_user_profile');
+    let initStoreType: StoreType = 'kirana';
+    if (savedProfileStr) {
+      try {
+        const p = JSON.parse(savedProfileStr);
+        if (p?.storeType) initStoreType = p.storeType;
+      } catch (e) {
+        // ignore
+      }
+    }
+    return getDefaultStockItems(initStoreType);
   });
 
   const [customers, setCustomers] = useState<Customer[]>(() => {
@@ -148,6 +166,7 @@ export default function App() {
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [editingStockItem, setEditingStockItem] = useState<StockItem | undefined>(undefined);
   const [initialBarcodeForNewItem, setInitialBarcodeForNewItem] = useState<string | undefined>(undefined);
+  const [addItemAutoScanDirectly, setAddItemAutoScanDirectly] = useState(false);
   const [showOrderListModal, setShowOrderListModal] = useState(false);
   const [showNightCountModal, setShowNightCountModal] = useState(false);
   const [showScanBillModal, setShowScanBillModal] = useState(false);
@@ -187,11 +206,12 @@ export default function App() {
     }
   });
 
-  // Debounced sync to public customer catalog (prevents lag, avoids continuous network writes, stays in Free Spark Plan)
+  // Debounced sync to public customer catalog (strictly guarded: only when user is authenticated)
   useEffect(() => {
+    if (!currentUser || !profile.phone) return;
     const timer = setTimeout(() => {
-      const storeId = profile.phone || (currentUser ? currentUser.uid : 'demo');
-      publishStoreCatalog(storeId, profile.shopName, profile.storeType, profile.phone, stockItems);
+      const storeId = profile.phone || currentUser.uid;
+      publishStoreCatalog(storeId, profile.shopName || 'Krōw Store', profile.storeType, profile.phone, stockItems);
     }, 6000);
     return () => clearTimeout(timer);
   }, [stockItems, profile.shopName, profile.storeType, profile.phone, currentUser]);
@@ -341,8 +361,8 @@ export default function App() {
       });
       showToast(
         profile.language === 'en'
-          ? 'Cloud database synchronized!'
-          : 'क्लाउड डेटाबेस सफलतापूर्वक सिंक हो गया!'
+          ? 'Data synchronized successfully!'
+          : 'डेटा सफलतापूर्वक सिंक हो गया!'
       );
     } catch (err) {
       console.warn('Manual sync error:', err);
@@ -357,6 +377,17 @@ export default function App() {
     try {
       await signOut(auth);
       setCurrentUser(null);
+      const cleanGuestProfile: UserProfile = {
+        uid: 'guest',
+        shopName: '',
+        ownerName: '',
+        language: profile.language,
+        storeType: profile.storeType,
+        phone: '',
+        createdAt: new Date().toISOString(),
+      };
+      setProfile(cleanGuestProfile);
+      localStorage.removeItem('krow_user_profile');
       showToast(
         profile.language === 'en'
           ? 'Logged out successfully'
@@ -409,9 +440,27 @@ export default function App() {
   };
 
   // Profile Update Handler
-  const handleUpdateProfile = async (updated: Partial<UserProfile>) => {
+  const handleUpdateProfile = async (updated: Partial<UserProfile>, shouldUpdateStock?: boolean) => {
+    const oldStoreType = profile.storeType;
+    const newStoreType = updated.storeType;
     const newProfile = { ...profile, ...updated };
     setProfile(newProfile);
+
+    // If store type changed and user accepted stock replacement (or was requested)
+    if (newStoreType && (shouldUpdateStock || (shouldUpdateStock !== false && newStoreType !== oldStoreType))) {
+      const newStock = newStoreType === 'stationery' ? getAllStationeryStockItems() : getDefaultStockItems(newStoreType);
+      setStockItems(newStock);
+      localStorage.setItem('krow_stock_items', JSON.stringify(newStock));
+      if (currentUser) {
+        batchSaveStockItems(currentUser.uid, newStock).catch(console.warn);
+      }
+      showToast(
+        profile.language === 'en'
+          ? `Stock updated to ${newStoreType} inventory!`
+          : `दुकान का स्टॉक '${newStoreType === 'stationery' ? 'स्टेशनरी' : newStoreType}' के अनुसार अपडेट हो गया!`
+      );
+    }
+
     if (currentUser) {
       const path = `users/${currentUser.uid}`;
       try {
@@ -433,15 +482,15 @@ export default function App() {
     setHasCompletedOnboarding(true);
     localStorage.setItem('krow_onboarded', 'true');
 
-    if (storeType === 'stationery') {
-      const stationeryStock = getAllStationeryStockItems();
-      setStockItems(stationeryStock);
-    }
+    const newStock = storeType === 'stationery' ? getAllStationeryStockItems() : getDefaultStockItems(storeType);
+    setStockItems(newStock);
+    localStorage.setItem('krow_stock_items', JSON.stringify(newStock));
 
     if (currentUser) {
       const path = `users/${currentUser.uid}`;
       try {
         await setDoc(doc(db, 'users', currentUser.uid), updated, { merge: true });
+        await batchSaveStockItems(currentUser.uid, newStock);
       } catch (err) {
         handleFirestoreError(err, OperationType.UPDATE, path);
       }
@@ -652,9 +701,11 @@ export default function App() {
     const today = new Date().toISOString().split('T')[0];
     const newSales: SaleRecord[] = [];
 
-    // Deduct stock quantities safely
-    setStockItems((prev) =>
-      prev.map((item) => {
+    // Deduct stock quantities safely & automatically save any newly scanned items into stock
+    const newlyCreatedItems: StockItem[] = [];
+    setStockItems((prev) => {
+      const existingIds = new Set(prev.map((i) => i.id));
+      const updated = prev.map((item) => {
         const cartMatch = cart.find((ci) => ci.item.id === item.id);
         if (cartMatch) {
           const updatedQty = Math.max(0, item.currentQuantity - cartMatch.quantity);
@@ -670,8 +721,23 @@ export default function App() {
           };
         }
         return item;
-      })
-    );
+      });
+
+      // If cart contains newly scanned items not in existing stock, list them into stock by themselves!
+      cart.forEach((ci) => {
+        if (!existingIds.has(ci.item.id)) {
+          const newItem: StockItem = {
+            ...ci.item,
+            currentQuantity: Math.max(0, (ci.item.currentQuantity ?? 20) - ci.quantity),
+            createdAt: ci.item.createdAt || new Date().toISOString(),
+          };
+          newlyCreatedItems.push(newItem);
+          updated.unshift(newItem);
+        }
+      });
+
+      return updated;
+    });
 
     // Record sales
     cart.forEach((ci) => {
@@ -698,10 +764,14 @@ export default function App() {
       for (const sale of newSales) {
         saveSaleRecordToFirestore(currentUser.uid, sale).catch(() => {});
       }
-      // 2. Batch update stock quantities in Firestore
+      // 2. Save any newly created stock items
+      if (newlyCreatedItems.length > 0) {
+        batchSaveStockItems(currentUser.uid, newlyCreatedItems).catch(() => {});
+      }
+      // 3. Batch update stock quantities in Firestore
       const stockUpdates = cart.map((ci) => {
-        const currentItem = stockItems.find((s) => s.id === ci.item.id);
-        const remaining = Math.max(0, (currentItem?.currentQuantity || 0) - ci.quantity);
+        const currentItem = stockItems.find((s) => s.id === ci.item.id) || newlyCreatedItems.find((s) => s.id === ci.item.id);
+        const remaining = Math.max(0, ((currentItem?.currentQuantity ?? 20) - ci.quantity));
         return { itemId: ci.item.id, currentQuantity: remaining };
       });
       batchUpdateStockQuantities(currentUser.uid, stockUpdates);
@@ -1024,6 +1094,13 @@ export default function App() {
                 onOpenAddItem={(itemToEdit) => {
                   setInitialBarcodeForNewItem(undefined);
                   setEditingStockItem(itemToEdit);
+                  setAddItemAutoScanDirectly(false);
+                  setShowAddItemModal(true);
+                }}
+                onOpenScanToAdd={() => {
+                  setInitialBarcodeForNewItem(undefined);
+                  setEditingStockItem(undefined);
+                  setAddItemAutoScanDirectly(true);
                   setShowAddItemModal(true);
                 }}
                 onOpenOrderList={() => setShowOrderListModal(true)}
@@ -1102,12 +1179,14 @@ export default function App() {
           storeType={profile.storeType}
           itemToEdit={editingStockItem}
           initialBarcode={initialBarcodeForNewItem}
+          autoScanDirectly={addItemAutoScanDirectly}
           onSave={handleSaveStockItem}
           onDelete={handleDeleteStockItem}
           onClose={() => {
             setShowAddItemModal(false);
             setEditingStockItem(undefined);
             setInitialBarcodeForNewItem(undefined);
+            setAddItemAutoScanDirectly(false);
           }}
         />
       )}
@@ -1117,9 +1196,9 @@ export default function App() {
         <OrderListModal
           language={profile.language}
           stockItems={stockItems}
-          shopName={profile.shopName}
-          ownerName={profile.ownerName}
-          phone={profile.phone}
+          shopName={currentUser ? (profile.shopName || 'Krōw POS') : 'Krōw POS'}
+          ownerName={currentUser ? (profile.ownerName || currentUser.displayName || '') : ''}
+          phone={currentUser ? (profile.phone || '') : ''}
           onClose={() => setShowOrderListModal(false)}
           onBatchReceiveStock={handleBatchReceiveStock}
         />
@@ -1156,6 +1235,7 @@ export default function App() {
           onConfirmCartSale={handleConfirmScanToSell}
           onRecordSale={handleRecordSale}
           onAddUdhaarTransaction={handleAddTransaction}
+          onAddMasterItemToStock={handleAddMasterItemToStock}
           onSwitchToScanToSell={() => {
             const currentItem = quickSellTargetItem;
             setShowQuickSellModal(false);
@@ -1192,14 +1272,14 @@ export default function App() {
       {showShareStockModal && (
         <ShareStockModal
           language={profile.language}
-          storeId={profile.phone || 'demo'}
-          storeName={profile.shopName}
-          storePhone={profile.phone}
+          storeId={currentUser ? (profile.phone || currentUser.uid) : 'demo'}
+          storeName={currentUser ? (profile.shopName || 'Krōw Store') : 'Krōw Demo Store'}
+          storePhone={currentUser ? (profile.phone || '') : ''}
           stockItems={stockItems}
           onClose={() => setShowShareStockModal(false)}
           onOpenPublicPreview={() => {
             setShowShareStockModal(false);
-            setPublicStoreId(profile.phone || 'demo');
+            setPublicStoreId(currentUser ? (profile.phone || currentUser.uid) : 'demo');
             setIsPublicView(true);
           }}
         />
@@ -1303,12 +1383,8 @@ export default function App() {
           currentUser={currentUser}
           language={profile.language}
           onClose={() => setShowPersonalizeModal(false)}
-          onSave={async (updated) => {
-            await handleUpdateProfile(updated);
-            if (updated.storeType === 'stationery' && stockItems.length === 0) {
-              const stationeryStock = getAllStationeryStockItems();
-              setStockItems(stationeryStock);
-            }
+          onSave={async (updated, shouldUpdateStock) => {
+            await handleUpdateProfile(updated, shouldUpdateStock);
             showToast(
               profile.language === 'en'
                 ? 'Shop branding & settings saved!'

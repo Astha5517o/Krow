@@ -21,40 +21,46 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onChangeTab, la
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#FAF7F0]/95 backdrop-blur-md border-t border-[#E4DFD2] shadow-[0_-4px_20px_rgba(38,36,33,0.06)] pb-safe">
-      <div className="max-w-md mx-auto h-16 px-3 flex items-center justify-around">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#FAF7F0]/95 backdrop-blur-md border-t border-[#E4DFD2] shadow-[0_-2px_12px_rgba(20,40,30,0.05)] pb-safe">
+      <div className="max-w-md mx-auto h-16 px-2 flex items-center justify-around">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
-            <motion.button
+            <button
               key={tab.id}
               onClick={() => onChangeTab(tab.id)}
-              whileTap={{ scale: 0.92 }}
-              className={`relative flex flex-col items-center justify-center min-w-[84px] h-12 px-3 rounded-full transition-colors duration-150 touch-manipulation cursor-pointer ${
-                isActive
-                  ? 'text-[#1E4632] font-bold'
-                  : 'text-[#726C60] hover:text-[#262421]'
-              }`}
+              className="flex-1 max-w-[120px] h-full flex flex-col items-center justify-center touch-manipulation cursor-pointer select-none active:scale-95 transition-transform"
               type="button"
+              aria-label={tab.label}
+              aria-selected={isActive}
             >
-              {isActive && (
-                <motion.div
-                  layoutId="activeTabIndicator"
-                  className="absolute inset-0 bg-[#E7F0EA] rounded-full border border-[#2F6B4F]/20 shadow-2xs -z-10"
-                  transition={{ type: 'spring', stiffness: 500, damping: 38 }}
-                />
-              )}
+              {/* Material 3 Active Icon Pill Indicator */}
+              <div className="relative flex items-center justify-center w-14 h-8 rounded-full transition-all">
+                {isActive && (
+                  <motion.div
+                    layoutId="m3ActiveNavPill"
+                    className="absolute inset-0 bg-[#E4EFE8] rounded-full border border-[#23583C]/20 -z-10"
+                    transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+                  />
+                )}
+                <span
+                  className={`material-symbols-outlined text-[22px] transition-colors ${
+                    isActive ? 'text-[#0A2719] fill' : 'text-[#5C6460]'
+                  }`}
+                >
+                  {tab.icon}
+                </span>
+              </div>
+
+              {/* Text Label (Strict single-line Android 11sp ratio) */}
               <span
-                className={`material-symbols-outlined text-[23px] transition-transform duration-150 ${
-                  isActive ? 'fill scale-105' : 'scale-100'
+                className={`text-[11px] leading-tight tracking-tight mt-0.5 whitespace-nowrap transition-colors ${
+                  isActive ? 'font-bold text-[#0A2719]' : 'font-medium text-[#5C6460]'
                 }`}
               >
-                {tab.icon}
-              </span>
-              <span className="text-[11px] tracking-tight leading-none mt-0.5">
                 {tab.label}
               </span>
-            </motion.button>
+            </button>
           );
         })}
       </div>

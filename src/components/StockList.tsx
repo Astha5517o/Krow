@@ -13,6 +13,7 @@ interface StockListProps {
   onOpenOrderList: () => void;
   onQuickSell: (item: StockItem) => void;
   onOpenScanToSell?: () => void;
+  onOpenScanToAdd?: () => void;
   onOpenShareStock?: () => void;
 }
 
@@ -24,6 +25,7 @@ export const StockList: React.FC<StockListProps> = ({
   onOpenOrderList,
   onQuickSell,
   onOpenScanToSell,
+  onOpenScanToAdd,
   onOpenShareStock,
 }) => {
   const t = translations[language];
@@ -32,8 +34,11 @@ export const StockList: React.FC<StockListProps> = ({
   const [activeCalculationInfo, setActiveCalculationInfo] = useState<CalculationInfoData | null>(null);
 
   const categories = useMemo(() => {
-    return ['all', ...getDefaultCategories(storeType)];
-  }, [storeType]);
+    const defaultCats = getDefaultCategories(storeType);
+    const existingItemCats = Array.from(new Set(items.map((i) => i.category))).filter(Boolean);
+    const merged = Array.from(new Set([...defaultCats, ...existingItemCats]));
+    return ['all', ...merged];
+  }, [storeType, items]);
 
   const filteredItems = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -67,6 +72,20 @@ export const StockList: React.FC<StockListProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {onOpenScanToAdd && (
+            <button
+              id="stock-scan-add-btn"
+              onClick={onOpenScanToAdd}
+              className="h-9 px-3 rounded-full bg-[#1E4632] text-white hover:bg-[#163526] active:scale-95 font-bold text-xs flex items-center gap-1 shadow-2xs transition-all touch-manipulation"
+              type="button"
+              title={language === 'en' ? 'Scan packets to auto-list in stock' : 'पैकेट स्कैन कर सीधे स्टॉक में लिस्ट करें'}
+            >
+              <span className="material-symbols-outlined text-base text-[#F4D03F]">bolt</span>
+              <span className="material-symbols-outlined text-base">barcode_scanner</span>
+              <span className="hidden sm:inline">{language === 'en' ? 'Scan to Stock' : 'पैकेट स्कैन'}</span>
+            </button>
+          )}
+
           {onOpenScanToSell && (
             <button
               id="stock-scan-sell-btn"
@@ -75,8 +94,8 @@ export const StockList: React.FC<StockListProps> = ({
               type="button"
               title={language === 'en' ? 'Scan to Sell' : 'बारकोड से बेचें'}
             >
-              <span className="material-symbols-outlined text-base">barcode_scanner</span>
-              <span className="hidden sm:inline">{language === 'en' ? 'Scan Sell' : 'बारकोड'}</span>
+              <span className="material-symbols-outlined text-base">point_of_sale</span>
+              <span className="hidden sm:inline">{language === 'en' ? 'Scan Sell' : 'बारकोड बिल'}</span>
             </button>
           )}
 

@@ -32,6 +32,144 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  // AI & OpenFoodFacts Barcode Product Auto-Lookup Endpoint
+  app.post("/api/lookup-barcode", async (req, res) => {
+    try {
+      const { barcode } = req.body;
+      if (!barcode || typeof barcode !== "string") {
+        return res.status(400).json({ success: false, error: "Invalid barcode" });
+      }
+      const cleanCode = barcode.trim();
+      if (!cleanCode) {
+        return res.status(400).json({ success: false, error: "Empty barcode" });
+      }
+
+      // 1. Try OpenFoodFacts API first with quick timeout
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const offUrl = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(cleanCode)}.json`;
+        const offResp = await fetch(offUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (offResp.ok) {
+          const offData = await offResp.json();
+          if (offData.status === 1 && offData.product && (offData.product.product_name || offData.product.product_name_en)) {
+            const prod = offData.product;
+            const nameEn = prod.product_name_en || prod.product_name || "Product " + cleanCode;
+            const brand = prod.brands || "";
+            const quantity = prod.quantity || "";
+            const fullName = brand && !nameEn.toLowerCase().includes(brand.toLowerCase())
+              ? `${brand} ${nameEn}`
+              : nameEn;
+
+            let sellPrice = 20;
+            if (typeof prod.price === "number" && prod.price > 0) {
+              sellPrice = Math.round(prod.price);
+            }
+            const buyPrice = Math.round(sellPrice * 0.85);
+
+            let category = "पैकेज्ड फूड";
+            const catStr = (prod.categories || "").toLowerCase();
+            if (catStr.includes("biscuit") || catStr.includes("cookie") || catStr.includes("snack") || catStr.includes("crisp")) {
+              category = "बिस्कुट व नमकीन";
+            } else if (catStr.includes("beverage") || catStr.includes("drink") || catStr.includes("tea") || catStr.includes("coffee") || catStr.includes("juice")) {
+              category = "चाय व पेय";
+            } else if (catStr.includes("dairy") || catStr.includes("milk") || catStr.includes("cheese") || catStr.includes("butter") || catStr.includes("yogurt")) {
+              category = "दूध व डेयरी";
+            } else if (catStr.includes("oil") || catStr.includes("ghee") || catStr.includes("fat")) {
+              category = "खाद्य तेल व घी";
+            } else if (catStr.includes("spice") || catStr.includes("seasoning") || catStr.includes("salt") || catStr.includes("pepper")) {
+              category = "मसाले";
+            } else if (catStr.includes("cereal") || catStr.includes("grain") || catStr.includes("rice") || catStr.includes("flour") || catStr.includes("pulse")) {
+              category = "दाल व अनाज";
+            } else if (catStr.includes("soap") || catStr.includes("shampoo") || catStr.includes("hygiene") || catStr.includes("cosmetic") || catStr.includes("cream")) {
+              category = "पर्सनल केयर";
+            } else if (catStr.includes("clean") || catStr.includes("detergent") || catStr.includes("wash") || catStr.includes("dish")) {
+              category = "साबुन व डिटर्जेंट";
+            }
+
+            return res.json({
+              success: true,
+              product: {
+                barcode: cleanCode,
+                name: fullName + (quantity ? ` (${quantity})` : ""),
+                nameEn: fullName + (quantity ? ` (${quantity})` : ""),
+                category,
+                unit: "पैकेट",
+                sellPrice,
+                buyPrice,
+                brand,
+                source: "openfoodfacts",
+              },
+            });
+          }
+        }
+      } catch {
+        // OpenFoodFacts timed out or was unavailable; proceed to Gemini
+      }
+
+      // 2. Query Gemini for authoritative retail product identification
+      const ai = getGeminiClient();
+      const prompt = `Identify the FMCG/supermarket/packaged retail product with barcode number: "${cleanCode}".
+Context: This barcode is scanned in an Indian retail Kirana, supermarket, or general store.
+Return strictly a valid JSON object with no markdown formatting:
+{
+  "name": "Product name in Hindi (or English name transliterated to Hindi, e.g. पारले-जी बिस्कुट 100g, डिटॉल साबुन, लेज़ मैजिक मसाला)",
+  "nameEn": "Product name in English (e.g. Parle-G Biscuit 100g, Dettol Soap, Lays Magic Masala)",
+  "brand": "Brand name (e.g. Parle, Dettol, Nestlé, Britannia, Amul, ITC, HUL)",
+  "category": "One of: बिस्कुट व नमकीन, दाल व अनाज, मसाले, खाद्य तेल व घी, चाय व पेय, दूध व डेयरी, पैकेज्ड फूड, पर्सनल केयर, साबुन व डिटर्जेंट, सफाई सामान, स्टेशनरी सामान, जनरल सामान",
+  "unit": "Appropriate packaging unit: पैकेट, बोतल, पीस, टिन, जार, किलो",
+  "sellPrice": typical standard retail MRP in INR (number, e.g. 10, 20, 35, 50, etc.),
+  "buyPrice": estimated wholesale buy price in INR (number, ~85% of sellPrice)
+}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash-lite",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+          temperature: 0.1,
+        },
+      });
+
+      const text = response.text?.trim() || "";
+      if (text) {
+        let parsed: any;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          // If wrapped in code block
+          const clean = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+          parsed = JSON.parse(clean);
+        }
+        if (parsed && (parsed.name || parsed.nameEn)) {
+          const sellPrice = Number(parsed.sellPrice) || 20;
+          const buyPrice = Number(parsed.buyPrice) || Math.round(sellPrice * 0.85);
+          return res.json({
+            success: true,
+            product: {
+              barcode: cleanCode,
+              name: parsed.name || parsed.nameEn,
+              nameEn: parsed.nameEn || parsed.name,
+              brand: parsed.brand || "",
+              category: parsed.category || "पैकेज्ड फूड",
+              unit: parsed.unit || "पैकेट",
+              sellPrice,
+              buyPrice,
+              source: "gemini",
+            },
+          });
+        }
+      }
+
+      return res.json({ success: false, error: "Product not recognized" });
+    } catch (err) {
+      console.error("[Lookup Barcode Error]:", err);
+      return res.json({ success: false, error: "Lookup failed" });
+    }
+  });
+
   // AI Bill Scanning Endpoint using Gemini
   app.post("/api/scan-bill", async (req, res) => {
     const reqStart = Date.now();

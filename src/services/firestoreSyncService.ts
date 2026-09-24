@@ -21,6 +21,12 @@ import {
   UserProfile,
   UserLoginRecord,
 } from '../types';
+import { getAllStationeryStockItems } from '../data/stationeryMasterCatalog';
+import {
+  INITIAL_STOCK_ITEMS,
+  INITIAL_UNIFORM_STOCK_ITEMS,
+  INITIAL_GIFT_STOCK_ITEMS,
+} from '../data/defaultData';
 
 export interface SyncCallbacks {
   onProfileChange?: (profile: UserProfile) => void;
@@ -51,7 +57,7 @@ export function subscribeToUserData(userId: string, callbacks: SyncCallbacks): (
           const data = snapshot.data() as Partial<UserProfile>;
           callbacks.onProfileChange?.({
             uid: userId,
-            shopName: data.shopName || 'मेरी दुकान',
+            shopName: data.shopName || 'Krōw Store',
             ownerName: data.ownerName || '',
             language: data.language || 'hi',
             storeType: data.storeType || 'kirana',
@@ -229,7 +235,7 @@ export async function recordUserRegistration(
       {
         uid: userId,
         email: data.email,
-        shopName: data.shopName || 'मेरी दुकान',
+        shopName: data.shopName || 'Krōw Store',
         ownerName: data.ownerName || '',
         storeType: data.storeType || 'kirana',
         language: data.language || 'hi',
@@ -311,7 +317,7 @@ export async function recordUserLoginInfo(
         email: user.email || '',
         displayName: user.displayName || profile?.ownerName || '',
         photoURL: user.photoURL || '',
-        shopName: profile?.shopName || 'मेरी दुकान',
+        shopName: profile?.shopName || 'Krōw Store',
         storeType: profile?.storeType || 'kirana',
         language: profile?.language || 'hi',
         phone: profile?.phone || '',
@@ -404,7 +410,7 @@ export async function seedInitialFirestoreDataIfEmpty(
     ops.push({
       ref: doc(db, 'users', userId),
       data: {
-        shopName: localData.profile.shopName || 'मेरी दुकान',
+        shopName: localData.profile.shopName || 'Krōw Store',
         ownerName: localData.profile.ownerName || '',
         language: localData.profile.language || 'hi',
         storeType: localData.profile.storeType || 'kirana',
@@ -416,8 +422,32 @@ export async function seedInitialFirestoreDataIfEmpty(
       merge: true,
     });
 
-    // 2. Stock items
-    for (const item of localData.stockItems) {
+    // 2. Stock items - enforce strict isolation by storeType
+    let itemsToSeed = localData.stockItems;
+    const storeType = localData.profile.storeType || 'kirana';
+    if (storeType === 'stationery') {
+      const hasKirana = itemsToSeed.some((it) => it.category === 'दाल व अनाज' || it.category === 'खाद्य तेल व घी');
+      if (hasKirana || itemsToSeed.length === 0) {
+        itemsToSeed = getAllStationeryStockItems();
+      }
+    } else if (storeType === 'uniform') {
+      const hasKiranaOrStat = itemsToSeed.some((it) => it.category === 'दाल व अनाज' || it.category === 'पेन, पेंसिल व सुधार सामग्री');
+      if (hasKiranaOrStat || itemsToSeed.length === 0) {
+        itemsToSeed = INITIAL_UNIFORM_STOCK_ITEMS;
+      }
+    } else if (storeType === 'gift_shop') {
+      const hasKiranaOrStat = itemsToSeed.some((it) => it.category === 'दाल व अनाज' || it.category === 'पेन, पेंसिल व सुधार सामग्री');
+      if (hasKiranaOrStat || itemsToSeed.length === 0) {
+        itemsToSeed = INITIAL_GIFT_STOCK_ITEMS;
+      }
+    } else if (storeType === 'kirana') {
+      const hasStat = itemsToSeed.some((it) => it.category === 'पेन, पेंसिल व सुधार सामग्री' || it.category === 'कॉपियाँ, रजिस्टर व पेपर');
+      if (hasStat || itemsToSeed.length === 0) {
+        itemsToSeed = INITIAL_STOCK_ITEMS;
+      }
+    }
+
+    for (const item of itemsToSeed) {
       ops.push({ ref: doc(db, 'users', userId, 'items', item.id), data: item });
     }
 

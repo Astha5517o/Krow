@@ -8,7 +8,7 @@ interface PersonalizeShopModalProps {
   profile: UserProfile;
   currentUser: User | null;
   language: Language;
-  onSave: (updated: Partial<UserProfile>) => Promise<void> | void;
+  onSave: (updated: Partial<UserProfile>, shouldUpdateStock?: boolean) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -32,11 +32,20 @@ export const PersonalizeShopModal: React.FC<PersonalizeShopModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const [shopName, setShopName] = useState(profile.shopName || (currentUser?.displayName ? `${currentUser.displayName} की दुकान` : 'मेरी दुकान'));
-  const [ownerName, setOwnerName] = useState(profile.ownerName || currentUser?.displayName || '');
+  const [shopName, setShopName] = useState(
+    profile.shopName && profile.shopName !== 'मेरी दुकान' && profile.shopName !== 'डेमो स्टोर'
+      ? profile.shopName
+      : currentUser?.displayName
+      ? `${currentUser.displayName} की दुकान`
+      : ''
+  );
+  const [ownerName, setOwnerName] = useState(
+    profile.ownerName || currentUser?.displayName || ''
+  );
   const [phone, setPhone] = useState(profile.phone || '');
   const [storeType, setStoreType] = useState<StoreType>(profile.storeType || 'kirana');
   const [logoUrl, setLogoUrl] = useState<string>(profile.logoUrl || currentUser?.photoURL || '');
+  const [updateStockToStoreType, setUpdateStockToStoreType] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadError, setUploadError] = useState('');
 
@@ -100,13 +109,16 @@ export const PersonalizeShopModal: React.FC<PersonalizeShopModalProps> = ({
     e.preventDefault();
     setIsSaving(true);
     try {
-      await onSave({
-        shopName: shopName.trim() || 'मेरी दुकान',
-        ownerName: ownerName.trim(),
-        phone: phone.trim(),
-        storeType,
-        logoUrl: logoUrl.trim() || undefined,
-      });
+      await onSave(
+        {
+          shopName: shopName.trim() || (currentUser?.displayName ? `${currentUser.displayName} की दुकान` : 'Krōw Store'),
+          ownerName: ownerName.trim(),
+          phone: phone.trim(),
+          storeType,
+          logoUrl: logoUrl.trim() || undefined,
+        },
+        updateStockToStoreType
+      );
       onClose();
     } catch (err) {
       console.error('Error saving shop personalization:', err);
@@ -274,7 +286,7 @@ export const PersonalizeShopModal: React.FC<PersonalizeShopModalProps> = ({
                   </span>
                 )}
                 <span className="font-extrabold text-xs text-[#262421] truncate max-w-[150px]">
-                  {shopName.trim() || 'मेरी दुकान'}
+                  {shopName.trim() || 'Krōw POS'}
                 </span>
               </div>
             </div>
@@ -334,6 +346,39 @@ export const PersonalizeShopModal: React.FC<PersonalizeShopModalProps> = ({
                 );
               })}
             </div>
+
+            {/* Inventory Auto-Update Switch when changing store category */}
+            {storeType !== profile.storeType && (
+              <div className="mt-2.5 p-3 bg-[#E7F0EA] border border-[#2F6B4F]/30 rounded-2xl flex items-center justify-between gap-3 animate-scale-up">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-[#2F6B4F] text-white flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-base">inventory_2</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-[#1E4632] truncate">
+                      {language === 'en'
+                        ? 'Update inventory to match this store type'
+                        : 'दुकान के अनुसार शुरुआती स्टॉक बदलें'}
+                    </p>
+                    <p className="text-[11px] text-[#55695E] leading-snug">
+                      {storeType === 'stationery'
+                        ? (language === 'en' ? 'Will load 71+ stationery items (pens, notebooks, art) with barcodes' : 'किराना की जगह 71+ स्टेशनरी सामान (कॉपी, पेन, फेविकोल) लोड होंगे')
+                        : storeType === 'uniform'
+                        ? (language === 'en' ? 'Will load uniform & clothing stock items' : 'यूनिफॉर्म, शर्ट, पैंट व मोज़े का स्टॉक लोड होगा')
+                        : storeType === 'gift_shop'
+                        ? (language === 'en' ? 'Will load gifts & toys stock items' : 'गिफ्ट, खिलौने व घड़ियों का स्टॉक लोड होगा')
+                        : (language === 'en' ? 'Will load kirana grocery stock items' : 'किराना व राशन के सामान का स्टॉक लोड होगा')}
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={updateStockToStoreType}
+                  onChange={(e) => setUpdateStockToStoreType(e.target.checked)}
+                  className="w-5 h-5 accent-[#2F6B4F] shrink-0 rounded cursor-pointer"
+                />
+              </div>
+            )}
           </div>
 
           {/* 4. OWNER NAME & WHATSAPP PHONE */}
